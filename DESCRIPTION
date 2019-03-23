@@ -1,1 +1,17 @@
-Package: cellTypeCompositionsDate: 2019-03-14                          Version: 0.99.2License: GPL (>= 2)                          Description: Estimate cell type compositions from a table of clone      by cell type counts. Functions are provided for exploring the cell      type compositions that are displayed by cell lineages.  The      workhorse is a function that performs blocked Gibbs sampling on the      cell type frequencies in a parent population under a model that      assumes a vague prior for the total number of cells and a uniform      Dirichlet prior for the proportions fo different cell types.Title: Cell Type Compositions Gibbs SamplerAuthor: Charles Berry                       Maintainer: Charles Berry <ccberry@ucsd.edu>    RoxygenNote: 6.1.0Imports: Rcpp (>= 0.12.16),methodsLinkingTo: Rcpp
+Package: cellTypeCompositions
+Date: 2019-03-22 
+Version: 0.99.3
+License: GPL (>= 2)                          
+Description: Estimate cell type compositions from a table of clone
+      by cell type counts. Functions are provided for exploring the cell
+      type compositions that are displayed by cell lineages.  The
+      workhorse is a function that performs blocked Gibbs sampling on the
+      cell type frequencies in a parent population under a model that
+      assumes a vague prior for the total number of cells and a uniform
+      Dirichlet prior for the proportions fo different cell types.
+Title: Cell Type Compositions Gibbs Sampler
+Author: Charles Berry                       
+Maintainer: Charles Berry <ccberry@ucsd.edu>    
+RoxygenNote: 6.1.1
+Imports: Rcpp (>= 0.12.16),methods
+LinkingTo: Rcpp
