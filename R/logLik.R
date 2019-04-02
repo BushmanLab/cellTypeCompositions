@@ -11,7 +11,7 @@
 ##' @export
 ##' @importFrom stats dpois
 poislogpost <- function(ex.Sample,ex.OGS,obs){
-    stopifnot( length(obs) == nrow(ex.Sample) )
+    stopifnot( length(obs) == ncol(ex.OGS) )
     lambda <- t(ex.OGS) %*% ex.Sample
     res <-   dpois(obs,lambda,log=TRUE)
     dim(res) <- dim(lambda)

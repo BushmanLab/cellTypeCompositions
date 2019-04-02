@@ -73,7 +73,7 @@ NumericMatrix samplePI(IntegerVector gi, NumericMatrix om, NumericVector pi0,
 
     pi0 = gamma_vals / std::accumulate(gamma_vals.begin(),gamma_vals.end(),0.0);
     if ( (i >= nburn) && ((i-nburn)%nthin == 0L) )  
-      gammat(_, isamp++) = gamma_vals;
+      gammat(_, isamp++) = pi0 * Rf_rgamma((double)(R_minus_r + r),1.0);
   }
 
   return gammat;
