@@ -34,6 +34,8 @@ poislogpost <- function(ex.Sample,ex.OGS,obs){
 logposterior <- function(obj){
     objcall <- attr( obj, "call" )
     wtab <- eval.parent(objcall$gMat)
+    if (!is.matrix(wtab))
+            dim(wtab) <- c(1, length(wtab))
     uop <- eval.parent(objcall$uop)
     lapply(1:nrow(wtab), function(i) poislogpost(obj[[i]],uop,wtab[i,]))
 }
