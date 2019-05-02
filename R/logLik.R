@@ -1,10 +1,16 @@
 ##' Log Likelihood of Poisson observations given rates, proportions
 ##' lost, and mis-sorted
 ##'
-##' 
-##' @title Log Likelohood of Poisson Mixture 
-##' @param ex.Sample matrix of expected sample counts - one column for each clone
-##' @param ex.OGS expected cell counts observed given sample counts of one
+##' \code{poislogpost} gives the log likelihood for a collection of
+##' posterior samples from a Poisson parent for the expected numbers
+##' of observations. \code{marglogpost} implicitly integrates over a
+##' uniform proper prior for the expected total in a sample and
+##' returns values that are proportional to the posterior.
+##' @title Log Likelohood of Poisson Mixture
+##' @param ex.Sample matrix of expected sample counts - one column for
+##'     each clone
+##' @param ex.OGS expected cell counts observed given sample counts of
+##'     one
 ##' @param obs matrix of observed counts with one row for each clone
 ##' @return \code{nrow(obs)} loglikelihoods
 ##' @author Charles Berry
@@ -18,26 +24,52 @@ poislogpost <- function(ex.Sample,ex.OGS,obs){
     colSums( res )
   }
 
+
+## internal multinomial mass funciton
+dmulti <- function(x,prob,log=FALSE){
+    stopifnot(all(prob>0))
+    prob <- as.matrix(prob)
+    cs <- colSums(prob) 
+    stopifnot(cs <= 1.0 + 1e-7)
+    xs <- colSums(x*log(prob) - lgamma(x+1))+lgamma( sum(x) + 1 )
+    if (log) xs else exp(xs)
+}
+
+##' @rdname poislogpost
+##' @export
+marglogpost <- function(ex.Sample,ex.OGS,obs){
+    rhovec <- rowSums( ex.OGS )
+    prob <- prop.table(ex.Sample,2)
+    psum <- colSums( prob * rhovec )
+    log( psum) + dmulti( obs, prob, log=TRUE)
+  }
+
+
+
 ##' Compute the logposterior from an object produced by \code{ctSampler}
 ##'
 ##' The details of the setup are inferred from
-##' \code{attr(obj,"call")}, then \code{\link{poislogpost}} is
-##' called on each sample to find its log posterior.  A typical use is
-##' to wrap a call to \code{ctSampler} with this function.  If the
+##' \code{attr(obj,"call")}, then \code{\link{poislogpost}} is called
+##' on each sample to find its log posterior.  A typical use is to
+##' wrap a call to \code{ctSampler} with this function.  If the
 ##' objects used to construct the object \code{obj} are not available,
 ##' the function will fail.
 ##' @title log posterior of Gibbs samples
 ##' @param obj see \code{\link{ctSampler}}
+##' @param integrate logical, use marginal posterior over a locally
+##'     uniform prior (in which case the result is proportional to the
+##'     posterior).
 ##' @return a list of vectors of log posteriors
 ##' @author Charles Berry
 ##' @export
-logposterior <- function(obj){
+logposterior <- function(obj,integrate=FALSE){
     objcall <- attr( obj, "call" )
     wtab <- eval.parent(objcall$gMat)
     if (!is.matrix(wtab))
             dim(wtab) <- c(1, length(wtab))
     uop <- eval.parent(objcall$uop)
-    lapply(1:nrow(wtab), function(i) poislogpost(obj[[i]],uop,wtab[i,]))
+    pfun  <- if (integrate) marglogpost else poislogpost
+    lapply(1:nrow(wtab), function(i) pfun(obj[[i]],uop,wtab[i,]))
 }
 
 
