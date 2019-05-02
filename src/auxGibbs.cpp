@@ -1,6 +1,7 @@
 
 #include <RcppArmadillo.h>
 using namespace Rcpp;
+
 // [[Rcpp::depends(RcppArmadillo)]]
 
 /*
@@ -13,7 +14,7 @@ using namespace Rcpp;
   Date: 22-04-2019
 
 */;
-NumericVector rdirich( int n ){
+inline NumericVector rdirich( int n ){
   NumericVector rg( n );
   double rgsum = 0.0;
   for (int i = 0; i<n; i++) {
@@ -28,21 +29,21 @@ NumericVector rdirich( int n ){
 
 
 // [[Rcpp::export]]
-arma::rowvec logprob(NumericVector tabrow, NumericMatrix om, NumericMatrix eta,
-		     NumericVector etaN, int etaLast){
+inline arma::rowvec logprob(NumericVector tabrow, NumericMatrix& om, NumericMatrix& eta,
+			    NumericVector& etaN, int etaLast, arma::mat& rho){
 
   arma::mat om2 = Rcpp::as<arma::mat>(om);
-  arma::mat rho = om2.t() * as<arma::mat>(eta).cols(0L,etaLast);
-  arma::rowvec rhoSum = arma::sum( rho, 0L);
+  rho.cols(0L,etaLast) = om2.t() * as<arma::mat>(eta).cols(0L,etaLast);
+  arma::rowvec rhoSum = arma::sum( rho.cols(0L, etaLast), 0L);
   int tabsum = arma::sum(Rcpp::as<arma::vec>(tabrow));
-  arma::rowvec logpr = Rcpp::as<arma::rowvec>(tabrow) * log(rho);
+  arma::rowvec logpr = Rcpp::as<arma::rowvec>(tabrow) * log(rho.cols(0L,etaLast));
   logpr = logpr - (tabsum -1L)*log(rhoSum) +
       log(Rcpp::as<arma::rowvec>(etaN).subvec(0L,etaLast) );
   return logpr;
 }
 
 // [[Rcpp::export]]
-int newIndex(arma::rowvec logpr){
+inline int newIndex(arma::rowvec logpr){
   arma::rowvec pr = cumsum(exp(logpr));
   double prsum = as_scalar(pr.tail(1L));
   double ur = Rf_runif(0.0,prsum);
@@ -70,9 +71,10 @@ List auxGibbs(List wtab, NumericMatrix om,
   int etaCols = eta.ncol();
   int J = om.nrow();
   int K = om.ncol();
-
-  NumericMatrix rho( K, etaCols );
-  NumericVector rhoSum( etaCols );
+  arma::mat rho(K, etaCols);
+  
+  // NumericMatrix rho( K, etaCols );
+  // NumericVector rhoSum( etaCols );
 
   double *etaNpt = REAL(etaN);
   double *etapt = REAL(eta);
@@ -116,7 +118,7 @@ List auxGibbs(List wtab, NumericMatrix om,
     // rho and logprob
 
     int newind =
-      newIndex(logprob(tab(di[ i ], _),om,eta,etaN,etaM+auxM-1L));
+      newIndex(logprob(tab(di[ i ], _),om,eta,etaN,etaM+auxM-1L,rho));
 
     // update-eta>
 
