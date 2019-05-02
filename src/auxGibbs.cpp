@@ -13,7 +13,10 @@ using namespace arma;
   Author: Charles C. Berry
   Date: 22-04-2019
 
-*/;
+*/
+
+// uniform dirichlet random numbers
+
 inline NumericVector rdirich( int n ){
   NumericVector rg( n );
   double rgsum = 0.0;
@@ -25,10 +28,10 @@ inline NumericVector rdirich( int n ){
     rg[i]/=rgsum;
   }
   return rg;
-};
+}
 
 
-// [[Rcpp::export]]
+// log probability vector 
 inline rowvec logprob(NumericVector tabrow, NumericMatrix& om, NumericMatrix& eta,
 			    NumericVector& etaN, int etaLast, mat& rho){
 
@@ -42,7 +45,7 @@ inline rowvec logprob(NumericVector tabrow, NumericMatrix& om, NumericMatrix& et
   return logpr;
 }
 
-// [[Rcpp::export]]
+// sample one index
 inline int newIndex(rowvec logpr){
   rowvec pr = cumsum(exp(logpr));
   double prsum = as_scalar(pr.tail(1L));
@@ -58,7 +61,8 @@ List auxGibbs(List wtab, NumericMatrix om,
 	      NumericVector etaN_orig,
 	      IntegerVector diToEta_orig,
 	      int etaM = 0L,
-	      int auxM = 5L, double alpha = 100.0) {
+	      int auxM = 5L, double alpha = 100.0,
+	      int verbose = 0L) {
   // we get a list from R
   // pull std::vector<double> from R list
   // this is achieved through an implicit
@@ -93,21 +97,22 @@ List auxGibbs(List wtab, NumericMatrix om,
   int di2e = diToEta[ i ];
 
     if ( di2e >= 0L ){
-      etaNpt[ di2e ]--; 
+      etaNpt[ di2e ]--;
       // Rprintf("etaN=%e\n",      etaNpt[ di2e ]);
-      if ( etaNpt[ di2e ] == 0.0 ){	
-		decN++;
-		if( etaM-- > di2e ){
-		  std::copy(etaNpt+1L+di2e, etaNpt+etaM, etaNpt+di2e);
-		  std::copy(etapt + J * (1L + di2e ),
-			    etapt + J * ( etaM ),
-			    etapt + J * di2e );
-		  for (int idi=0; idi<ndat; idi++) 
-		    if (diToEta[ idi ] >= di2e) diToEta[ idi ]--;
-		}
+      if ( etaNpt[ di2e ] == 0.0 ){
+	// shift eta and etaN to the left
+	decN++;
+	if( etaM > di2e ){
+	  std::copy(etaNpt+1L+di2e, etaNpt+etaM, etaNpt+di2e);
+	  std::copy(etapt + J * (1L + di2e ),
+		    etapt + J * ( etaM ),
+		    etapt + J * di2e );
+	  etaM--;
+	  for (int idi=0; idi<ndat; idi++) 
+	    if (diToEta[ idi ] >= di2e) diToEta[ idi ]--;
+	}
       }
     }
-    ;
     
     // sample auxM from prior
     for (int j = 0; j<auxM; j++){
@@ -120,7 +125,7 @@ List auxGibbs(List wtab, NumericMatrix om,
     int newind =
       newIndex(logprob(tab(di[ i ], _),om,eta,etaN,etaM+auxM-1L,rho));
 
-    // update-eta>
+    // update-eta
 
     if (newind >= etaM){
       eta(_, etaM) = eta(_,newind);
@@ -134,7 +139,8 @@ List auxGibbs(List wtab, NumericMatrix om,
     // Rprintf("diToEta=%d\n",diToEta[ i ]);
   }
 
-  Rprintf("dec = %d new = %d old = %d\n", decN, incNnew, incNold);
+  if (verbose)  Rprintf("delete = %d add = %d use existing = %d\n",
+			decN, incNnew, incNold);
 // return an R list; this is achieved
 // through an implicit call to Rcpp::wrap
     return List::create(_["eta"] = eta,
