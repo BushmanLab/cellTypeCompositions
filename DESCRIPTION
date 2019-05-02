@@ -1,6 +1,6 @@
 Package: cellTypeCompositions
-Date: 2019-04-06
-Version: 0.99.9
+Date: 2019-05-02
+Version: 0.99.11
 License: GPL (>= 2)                          
 Description: Estimate cell type compositions from a table of clone
       by cell type counts. Functions are provided for exploring the cell
@@ -14,4 +14,4 @@ Author: Charles Berry
 Maintainer: Charles Berry <ccberry@ucsd.edu>    
 RoxygenNote: 6.1.1
 Imports: Rcpp (>= 0.12.16),methods
-LinkingTo: Rcpp
+LinkingTo: Rcpp, RcppArmadillo
