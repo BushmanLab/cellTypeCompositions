@@ -1,7 +1,7 @@
 
 #include <RcppArmadillo.h>
 using namespace Rcpp;
-
+using namespace arma;
 // [[Rcpp::depends(RcppArmadillo)]]
 
 /*
@@ -29,22 +29,22 @@ inline NumericVector rdirich( int n ){
 
 
 // [[Rcpp::export]]
-inline arma::rowvec logprob(NumericVector tabrow, NumericMatrix& om, NumericMatrix& eta,
-			    NumericVector& etaN, int etaLast, arma::mat& rho){
+inline rowvec logprob(NumericVector tabrow, NumericMatrix& om, NumericMatrix& eta,
+			    NumericVector& etaN, int etaLast, mat& rho){
 
-  arma::mat om2 = Rcpp::as<arma::mat>(om);
-  rho.cols(0L,etaLast) = om2.t() * as<arma::mat>(eta).cols(0L,etaLast);
-  arma::rowvec rhoSum = arma::sum( rho.cols(0L, etaLast), 0L);
-  int tabsum = arma::sum(Rcpp::as<arma::vec>(tabrow));
-  arma::rowvec logpr = Rcpp::as<arma::rowvec>(tabrow) * log(rho.cols(0L,etaLast));
+  mat om2 = Rcpp::as<mat>(om);
+  rho.cols(0L,etaLast) = om2.t() * as<mat>(eta).cols(0L,etaLast);
+  rowvec rhoSum = sum( rho.cols(0L, etaLast), 0L);
+  int tabsum = sum(Rcpp::as<vec>(tabrow));
+  rowvec logpr = Rcpp::as<rowvec>(tabrow) * log(rho.cols(0L,etaLast));
   logpr = logpr - (tabsum -1L)*log(rhoSum) +
-      log(Rcpp::as<arma::rowvec>(etaN).subvec(0L,etaLast) );
+      log(Rcpp::as<rowvec>(etaN).subvec(0L,etaLast) );
   return logpr;
 }
 
 // [[Rcpp::export]]
-inline int newIndex(arma::rowvec logpr){
-  arma::rowvec pr = cumsum(exp(logpr));
+inline int newIndex(rowvec logpr){
+  rowvec pr = cumsum(exp(logpr));
   double prsum = as_scalar(pr.tail(1L));
   double ur = Rf_runif(0.0,prsum);
   int index=0L;
@@ -71,7 +71,7 @@ List auxGibbs(List wtab, NumericMatrix om,
   int etaCols = eta.ncol();
   int J = om.nrow();
   int K = om.ncol();
-  arma::mat rho(K, etaCols);
+  mat rho(K, etaCols);
   
   // NumericMatrix rho( K, etaCols );
   // NumericVector rhoSum( etaCols );
