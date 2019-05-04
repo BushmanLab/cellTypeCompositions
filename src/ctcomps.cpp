@@ -44,17 +44,18 @@ NumericMatrix samplePI(IntegerVector gi, NumericMatrix om, NumericVector pi0,
   }
   int r = std::accumulate(gi.begin(), gi.end(), 0L);
 
+  NumericVector pivec= clone(pi0);
   NumericMatrix gammat(nrom, nkeep);
 
   for (int i=0L; i < nsamps; i++){
-    double rho_obs=std::inner_product(pi0.begin(),pi0.end(),rwom.begin(),0.0);
+    double rho_obs=std::inner_product(pivec.begin(),pivec.end(),rwom.begin(),0.0);
     int R_minus_r = rnbinom(1L,r,rho_obs)[0L];
-    NumericVector pi_miss = pi0 * (1.0 - rwom) / (1-rho_obs);
+    NumericVector pi_miss = pivec * (1.0 - rwom) / (1-rho_obs);
     IntegerVector dropped_f(nrom);
     rmultnm(R_minus_r, REAL(pi_miss),nrom,INTEGER(dropped_f));
     NumericMatrix pi_given_gi(nrom,ncom); 
     for (int j = 0L; j<ncom; j++) {
-      pi_given_gi( _, j ) = om( _, j ) * pi0;
+      pi_given_gi( _, j ) = om( _, j ) * pivec;
       double colsm = std::accumulate(pi_given_gi( _,j).begin(),pi_given_gi( _, j).end(),0.0);
       pi_given_gi( _, j) = pi_given_gi( _, j)/colsm;
     }
@@ -71,9 +72,9 @@ NumericMatrix samplePI(IntegerVector gi, NumericMatrix om, NumericVector pi0,
     NumericVector gamma_vals(nrom);
     for (int j = 0; j<nrom; j++) gamma_vals[j] = Rf_rgamma(dirichlet_parm[j],1.0);
 
-    pi0 = gamma_vals / std::accumulate(gamma_vals.begin(),gamma_vals.end(),0.0);
+    pivec = gamma_vals / std::accumulate(gamma_vals.begin(),gamma_vals.end(),0.0);
     if ( (i >= nburn) && ((i-nburn)%nthin == 0L) )  
-      gammat(_, isamp++) = pi0 * Rf_rgamma((double)(R_minus_r + r),1.0);
+      gammat(_, isamp++) = pivec * Rf_rgamma((double)(R_minus_r + r),1.0);
   }
 
   return gammat;
