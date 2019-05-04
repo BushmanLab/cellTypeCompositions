@@ -77,6 +77,7 @@ List auxGibbs(List wtab, NumericMatrix om,
   int K = om.ncol();
   mat rho(K, etaCols);
   
+  
   // NumericMatrix rho( K, etaCols );
   // NumericVector rhoSum( etaCols );
 
@@ -94,28 +95,22 @@ List auxGibbs(List wtab, NumericMatrix om,
   int incNold = 0L;
   for (int i=0; i<ndat; i++){
   
-  int di2e = diToEta[ i ];
+    int di2e = diToEta[ i ];
 
-    if ( di2e >= 0L ){
-      etaNpt[ di2e ]--;
-      // Rprintf("etaN=%e\n",      etaNpt[ di2e ]);
-      if ( etaNpt[ di2e ] == 0.0 ){
-	// shift eta and etaN to the left
-	decN++;
-	if( etaM > di2e ){
-	  std::copy(etaNpt+1L+di2e, etaNpt+etaM, etaNpt+di2e);
-	  std::copy(etapt + J * (1L + di2e ),
-		    etapt + J * ( etaM ),
-		    etapt + J * di2e );
-	  etaM--;
-	  for (int idi=0; idi<ndat; idi++) 
-	    if (diToEta[ idi ] >= di2e) diToEta[ idi ]--;
-	}
-      }
+
+    double etaN1; // singletons need one less 
+    if (di2e >= 0L && etaNpt[ di2e] == 1.0){
+      etaN1 = 1;
+      etaNpt[ di2e ] = alpha/auxM;
     }
+    else
+      { etaN1 = 0; 
+	if (di2e>=0L) etaNpt[ di2e ]--;
+      }
+
     
     // sample auxM from prior
-    for (int j = 0; j<auxM; j++){
+    for (int j = 0; j < auxM-etaN1; j++){
       eta( _, j + etaM) = rdirich(J);
       etaNpt[ j+etaM ] = alpha/auxM;
     }
@@ -123,29 +118,68 @@ List auxGibbs(List wtab, NumericMatrix om,
     // rho and logprob
 
     int newind =
-      newIndex(logprob(tab(di[ i ], _),om,eta,etaN,etaM+auxM-1L,rho));
+      newIndex(logprob(tab(di[ i ], _),om,eta,etaN,etaM+auxM-etaN1-1L,rho));
 
     // update-eta
 
-    if (newind >= etaM){
-      eta(_, etaM) = eta(_,newind);
-      etaN[etaM] = 1L;incNnew++;
-      diToEta[ i ] = etaM;
-      etaM++;
-    } else {
-      etaN[ newind ]++;incNold++;
-      diToEta[ i] = newind;
+    if (etaN1){
+      //singleton case
+      if (newind == di2e)
+	{
+	  // retain di2e
+	  etaNpt[ di2e ] = 1;
+	}
+      else if (newind < etaM)
+	{
+	  //move di2e
+	  etaNpt[ newind ]++;
+	  diToEta[ i ] = newind;
+	  // shift left
+	  std::copy(etaNpt+1L+di2e, etaNpt+etaM, etaNpt+di2e);
+	  std::copy(etapt + J * (1L + di2e ),
+		    etapt + J * ( etaM ),
+		    etapt + J * di2e );
+	  etaM--;
+	  decN++;
+	  for (int idi=0; idi<ndat; idi++) 
+	    if (diToEta[ idi ] >= di2e) diToEta[ idi ]--;
+	  // Rprintf("diToEta=%d\n",diToEta[ i ]);
+	}
+      else
+	{
+	  // copy to di2e
+	  etaNpt[ di2e ] = 1;incNnew++;
+	  eta(_,di2e) = eta(_,newind);
+	} 
     }
-    // Rprintf("diToEta=%d\n",diToEta[ i ]);
+    else
+      // initial run or etaN[ di2e ] >= 2
+      {
+	if (newind >= etaM)
+	  {
+	    etaNpt[ etaM ] =1;
+	    if (newind>etaM) eta(_,etaM) = eta(_,newind);
+	    diToEta[ i ] = etaM;
+	    etaM++;
+	    incNnew++;
+	  }
+	else
+	  {
+	    etaNpt[ newind ]++;
+	    diToEta[ i ] = newind;
+	    incNold++;
+	  }
+	
+      }
   }
 
   if (verbose)  Rprintf("delete = %d add = %d use existing = %d\n",
 			decN, incNnew, incNold);
-// return an R list; this is achieved
-// through an implicit call to Rcpp::wrap
-    return List::create(_["eta"] = eta,
-			_["etaN"] = etaN,
-			_["dataToEta"] = diToEta,
-			_["etaM"] = etaM);
+  // return an R list; this is achieved
+  // through an implicit call to Rcpp::wrap
+  return List::create(_["eta"] = eta,
+		      _["etaN"] = etaN,
+		      _["dataToEta"] = diToEta,
+		      _["etaM"] = etaM);
 }
 
