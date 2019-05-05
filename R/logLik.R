@@ -31,7 +31,7 @@ dmulti <- function(x,prob,log=FALSE){
     prob <- as.matrix(prob)
     cs <- colSums(prob) 
     stopifnot(cs <= 1.0 + 1e-7)
-    xs <- colSums(x*log(prob) - lgamma(x+1))+lgamma( sum(x) + 1 )
+    xs <- colSums(x*log(prob) - lgamma(x+1))+lgamma( colSums(x) + 1 )
     if (log) xs else exp(xs)
 }
 
@@ -41,9 +41,8 @@ marglogpost <- function(ex.Sample,ex.OGS,obs){
     rhovec <- rowSums( ex.OGS )
     prob <- prop.table(ex.Sample,2)
     psum <- colSums( prob * rhovec )
-    log( psum) + dmulti( obs, prob, log=TRUE)
+    log( psum) + dmulti( t(obs), prob, log=TRUE)
   }
-
 
 
 ##' Compute the logposterior from an object produced by \code{ctSampler}
