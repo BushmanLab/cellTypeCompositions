@@ -37,13 +37,14 @@ gibbsDPP <- function(
                      etaCols = 500L
                      )
 {
-    if (is.null(eta))
-        eta <- array(0.0,c(nrow(om), etaCols))
-    if (is.null(etaN)) etaN <- rep(0L, ncol(eta))
-    if (is.null(dataToEta)) dataToEta <- 
-                              rep(-1L,length(wtab$data.index))
-    auxGibbs(wtab, om, eta, etaN, dataToEta, etaM,
-             auxM , alpha , verbose )
+  if (is.null(eta))
+    eta <- array(0.0,c(nrow(om), etaCols))
+  if (is.null(etaN)) etaN <- rep(0L, ncol(eta))
+  if (is.null(dataToEta)) dataToEta <- 
+                            rep(-1L,length(wtab$data.index))
+  stopifnot( all( etaM >= dataToEta + 1L) )
+  auxGibbs(wtab, om, eta, etaN, dataToEta, etaM,
+           auxM , alpha , verbose )
 }
 
 
@@ -64,23 +65,46 @@ gibbsScan <- function(wtab,
 		      etaCols=500L,
 		      verbose=FALSE,
 		      ...){
+  
   if (is.null(eta))  eta <- array(0.0,c(nrow(om),etaCols))
-   if (is.null(dataToEta)) dataToEta <- rep(-1L,length(wtab[["data.index"]]))
+  if (is.null(dataToEta)) dataToEta <- rep(-1L,length(wtab[["data.index"]]))
   if (is.null(eta))
     eta <- array(0.0,c(nrow(om), etaCols))
   if (is.null(etaN)) etaN <- rep(0L, ncol(eta))
   if (is.null(dataToEta)) dataToEta <- 
 			    rep(-1L,length(wtab$data.index))
+  stopifnot( all( etaM >= dataToEta + 1L) )
   stopifnot(length(etaN)==ncol(eta),
 	    nrow(om) == ncol(wtab[["tab"]]))
   ctp <- list(nburn=10L, ncore=1L)
   ctp[names(ctParms)] <- ctParms
 
+  logpriorC <-
+    function(etaN,alpha){
+      n <- sum(etaN)
+      length(etaN)*log(alpha) +
+        sum(lgamma(etaN)) -
+        sum(log(alpha+0:(n-1)))
+    }
+  logpost <- function(wtab,om,eta,etaN,dataToEta,etaM,alpha){
+    etaN <- etaN[1:etaM]
+    eta <- eta[,1:etaM]
+    uniq.indexes <- unique(cbind(wtab$data.index, dataToEta))
+    uniq.sums <- table(match(paste(wtab$data.index, dataToEta),
+                             paste(uniq.indexes[,1],uniq.indexes[,2])))
+    marglik <-
+      marglogpost(eta[,1L+uniq.indexes[,2]],om,wtab[["tab"]][uniq.indexes[,1], ])
+    margliksum <- sum( marglik * uniq.sums)
+    ## Equations 6 and 10 Jain and Neal, 2007 yield: 
+    margliksum+logpriorC(etaN,alpha)-etaM*lgamma(nrow(om))
+  }
+  
+
   pass1 <- auxGibbs(wtab, om, eta, etaN, dataToEta, etaM,
 		    auxM , alpha , verbose )
 
   eta.by.ct <- table(pass1[["dataToEta"]],
-			wtab[["data.index"]]) %*% wtab[["tab"]]
+                     wtab[["data.index"]]) %*% wtab[["tab"]]
 
   eta.tuned <- sapply(ctSampler(eta.by.ct,om,
 				pass1[["eta"]][, 1:pass1[["etaM"]] ],
@@ -92,6 +116,8 @@ gibbsScan <- function(wtab,
 
   pass1[["eta"]][, 1:pass1[["etaM"]] ] <- eta.tuned
 
+  
+  
   pass2  <- auxGibbs(wtab,om,
 		     pass1[["eta"]],
 		     pass1[["etaN"]],
@@ -101,7 +127,12 @@ gibbsScan <- function(wtab,
 		     alpha=alpha,
 		     verbose=TRUE)
 
-
+  logpst <- double(nscans)
+  logpst[1] <- logpost(wtab, om, pass2[["eta"]], pass2[["etaN"]],
+                       pass2[["dataToEta"]],
+                       pass2[["etaM"]],
+                       alpha)
+  
   for (iscan in seq_len(nscans-1L)){
     ## if there are updates, do them:
     pass1 <- pass2
@@ -110,25 +141,33 @@ gibbsScan <- function(wtab,
 		       wtab[["data.index"]]) %*% wtab[["tab"]]
 
     eta.tuned <- sapply(ctSampler(eta.by.ct,om,
-				  pass1[["eta"]][, 1:pass1[["etaM"]] ],
-				  nkeep=1, # makes no sense otherwise
-				  nburn=ctp[["nburn"]],
-				  ncores=ctp[["ncore"]]),
-			prop.table)
-
+                                  pass1[["eta"]][, 1:pass1[["etaM"]] ],
+                                  nkeep=1, # makes no sense otherwise
+                                  nburn=ctp[["nburn"]],
+                                  ncores=ctp[["ncore"]]),
+                        prop.table)
+    
     pass1[["eta"]][, 1:pass1[["etaM"]] ] <- eta.tuned
-
+    
     pass2  <- auxGibbs(wtab,om,
-		       pass1[["eta"]],
-		       pass1[["etaN"]],
-		       pass1[["dataToEta"]],
-		       etaM=pass1[["etaM"]],
-		       auxM=auxM,
-		       alpha=alpha,
-		       verbose=TRUE)
+                       pass1[["eta"]],
+                       pass1[["etaN"]],
+                       pass1[["dataToEta"]],
+                       etaM=pass1[["etaM"]],
+                       auxM=auxM,
+                       alpha=alpha,
+                       verbose=TRUE)
+    logpst[ 1+iscan ] <-
+      logpost(wtab, om, pass2[["eta"]], pass2[["etaN"]],
+              pass2[["dataToEta"]],
+              pass2[["etaM"]],
+              alpha)
+    
+    
+
   }
-
-  list(last=pass2, launch=pass1)
-
+  
+  list(last=pass2, launch=pass1, logpost=logpst)
+  
 }
 
