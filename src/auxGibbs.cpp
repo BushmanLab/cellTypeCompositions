@@ -62,6 +62,7 @@ List auxGibbs(List wtab, NumericMatrix om,
 	      IntegerVector diToEta_orig,
 	      int etaM = 0L,
 	      int auxM = 5L, double alpha = 100.0,
+	      int ijvals = 0L,
 	      int verbose = 0L) {
   // we get a list from R
   // pull std::vector<double> from R list
@@ -93,7 +94,7 @@ List auxGibbs(List wtab, NumericMatrix om,
   int decN = 0L;
   int incNnew = 0L;
   int incNold = 0L;
-  for (int i=0; i<ndat; i++){
+  for (int i=ijvals; i<ndat; i++){
   
     int di2e = diToEta[ i ];
 
