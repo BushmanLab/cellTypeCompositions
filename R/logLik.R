@@ -20,9 +20,14 @@ poislogpost <- function(ex.Sample,ex.OGS,obs){
     stopifnot( length(obs) == ncol(ex.OGS) )
     lambda <- t(ex.OGS) %*% ex.Sample
     res <-   dpois(obs,lambda,log=TRUE)
-    dim(res) <- dim(lambda)
-    colSums( res )
-  }
+    if (is.matrix(lambda)) {
+        dim(res) <- dim(lambda)
+        colSums( res )
+    } else {
+        sum(res)
+    }
+    
+}
 
 
 ## internal multinomial mass funciton
@@ -31,17 +36,20 @@ dmulti <- function(x,prob,log=FALSE){
     prob <- as.matrix(prob)
     cs <- colSums(prob) 
     stopifnot(cs <= 1.0 + 1e-7)
-    xs <- colSums(x*log(prob) - lgamma(x+1))+lgamma( colSums(x) + 1 )
+    xs <- colSums(x*log(prob) - lgamma(x+1))+lgamma( colSums(as.matrix(x)) + 1 )
     if (log) xs else exp(xs)
 }
 
 ##' @rdname poislogpost
 ##' @export
 marglogpost <- function(ex.Sample,ex.OGS,obs){
+    ## obs can be a vector - recycled to match ex.Sample
+    ## or it can be a matrix with dim(obs) == rev( dim(ex.Sample) )
     rhovec <- rowSums( ex.OGS )
-    prob <- prop.table(ex.Sample,2)
+    prob <- prop.table(as.matrix(ex.Sample),2)
     psum <- colSums( prob * rhovec )
-    log( psum) + dmulti( t(obs), prob, log=TRUE)
+    if (is.matrix(obs)) obs <- t( obs )
+    log( psum) + dmulti( obs, prob, log=TRUE)
   }
 
 
