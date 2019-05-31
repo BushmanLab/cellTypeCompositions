@@ -35,13 +35,13 @@ inline NumericVector rdirich( int n ){
 inline rowvec logprob(NumericVector tabrow, NumericMatrix& om, NumericMatrix& eta,
 			    NumericVector& etaN, int etaLast, mat& rho){
 
-  mat om2 = Rcpp::as<mat>(om);
-  rho.cols(0L,etaLast) = om2.t() * as<mat>(eta).cols(0L,etaLast);
+  mat om2 = as<mat>(om);
+  rho.cols(0L,etaLast) = trans( om2 ) * as<mat>(eta).cols(0L,etaLast);
   rowvec rhoSum = sum( rho.cols(0L, etaLast), 0L);
-  int tabsum = sum(Rcpp::as<vec>(tabrow));
-  rowvec logpr = Rcpp::as<rowvec>(tabrow) * log(rho.cols(0L,etaLast));
+  int tabsum = sum(as<vec>(tabrow));
+  rowvec logpr = as<rowvec>(tabrow) * log(rho.cols(0L,etaLast));
   logpr = logpr - (tabsum + 1L)*log(rhoSum) +
-      log(Rcpp::as<rowvec>(etaN).subvec(0L,etaLast) );
+      log(as<rowvec>(etaN).subvec(0L,etaLast) );
   return logpr;
 }
 
