@@ -8,7 +8,7 @@
 ##' returns values that are proportional to the posterior.
 ##' @title Log Likelohood of Poisson Mixture
 ##' @param ex.Sample matrix of expected sample counts - one column for
-##'     each clone
+##'     each clone. For \code{marglogpost} can be proportions.
 ##' @param ex.OGS expected cell counts observed given sample counts of
 ##'     one
 ##' @param obs matrix of observed counts with one row for each clone
@@ -45,11 +45,11 @@ dmulti <- function(x,prob,log=FALSE){
 marglogpost <- function(ex.Sample,ex.OGS,obs){
     ## obs can be a vector - recycled to match ex.Sample
     ## or it can be a matrix with dim(obs) == rev( dim(ex.Sample) )
-    rhovec <- rowSums( ex.OGS )
-    prob <- prop.table(as.matrix(ex.Sample),2)
-    psum <- colSums( prob * rhovec )
+    rho <- t( ex.OGS ) %*% ex.Sample
+    psum <- colSums(rho)
+    prop <- prop.table(rho,2)
     if (is.matrix(obs)) obs <- t( obs )
-    log( psum) + dmulti( obs, prob, log=TRUE)
+    - log( psum ) + dmulti( obs, prop, log=TRUE)
   }
 
 

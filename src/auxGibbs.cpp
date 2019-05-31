@@ -40,7 +40,7 @@ inline rowvec logprob(NumericVector tabrow, NumericMatrix& om, NumericMatrix& et
   rowvec rhoSum = sum( rho.cols(0L, etaLast), 0L);
   int tabsum = sum(Rcpp::as<vec>(tabrow));
   rowvec logpr = Rcpp::as<rowvec>(tabrow) * log(rho.cols(0L,etaLast));
-  logpr = logpr - (tabsum -1L)*log(rhoSum) +
+  logpr = logpr - (tabsum + 1L)*log(rhoSum) +
       log(Rcpp::as<rowvec>(etaN).subvec(0L,etaLast) );
   return logpr;
 }
