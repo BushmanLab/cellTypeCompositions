@@ -33,10 +33,9 @@ poislogpost <- function(ex.Sample,ex.OGS,obs){
 ## internal multinomial mass funciton
 dmulti <- function(x,prob,log=FALSE){
     stopifnot(all(prob>0))
-    prob <- as.matrix(prob)
-    cs <- colSums(prob) 
+    cs <- if(is.matrix(prob)) colSums(prob) else sum(prob)
     stopifnot(cs <= 1.0 + 1e-7)
-    xs <- colSums(x*log(prob) - lgamma(x+1))+lgamma( colSums(as.matrix(x)) + 1 )
+    xs <- colSums( x * log(prob) - lgamma(x+1))+lgamma( colSums(as.matrix(x)) + 1 )
     if (log) xs else exp(xs)
 }
 
