@@ -50,10 +50,12 @@ gibbsDPP <- function(
 
 ##' @rdname gibbsDPP
 ##' @param nscans integer with value \code{nscans>=1L}. How many scans
-##'   to do.
-##' @param ctParms list of values for \code{nburn} and \code{ncore}
-##' @param ijvals  \code{0L} by default, but for splitting and merging a
-##'   value of 2 is needed. Users should not usually change the default.
+##'     to do.
+##' @param ctParms list of values for \code{nburn}, \code{ncore}, and
+##'     \code{method} to pass to \code{\link{ctSampler}}
+##' @param ijvals \code{0L} by default, but for splitting and merging
+##'     a value of 2 is needed. Users should not usually change the
+##'     default.
 ##' @param ... unused at present
 ##' @export
 gibbsScan <- function(wtab,
@@ -90,7 +92,7 @@ gibbsScan <- function(wtab,
   }
   
   
-  ctp <- list(nburn=10L, ncore=1L)
+  ctp <- list(nburn=10L, ncore=1L, method="sampleX")
   ctp[names(ctParms)] <- ctParms
 
   logpriorC <-
@@ -142,7 +144,8 @@ gibbsScan <- function(wtab,
                                   pass2[["eta"]][, 1:pass2[["etaM"]], drop=FALSE ],
                                   nkeep=1, # makes no sense otherwise
                                   nburn=ctp[["nburn"]],
-                                  ncores=ctp[["ncore"]]),
+                                  ncores=ctp[["ncore"]],
+                                  method=ctp[["method"]]),
                         prop.table)
     
     pass2[["eta"]][, 1:pass2[["etaM"]] ] <- eta.tuned
