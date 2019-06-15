@@ -47,7 +47,7 @@ inline rowvec logprob(NumericVector tabrow, NumericMatrix& om, NumericMatrix& et
 
 // sample one index
 inline int newIndex(rowvec logpr){
-  rowvec pr = cumsum(exp(logpr));
+  rowvec pr = cumsum(exp(logpr-max(logpr)));
   double prsum = as_scalar(pr.tail(1L));
   double ur = Rf_runif(0.0,prsum);
   int index=0L;
