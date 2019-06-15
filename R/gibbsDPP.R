@@ -115,7 +115,7 @@ gibbsScan <- function(wtab,
                   om,wtab[["tab"]][uniq.indexes[,1], , drop=FALSE])
     margliksum <- sum( marglik * uniq.sums)
     ## Equations 6 and 10 Jain and Neal, 2007 yield: 
-    margliksum+logpriorC(etaN,alpha)-etaM*lgamma(nrow(om))
+    margliksum+logpriorC(etaN,alpha)+etaM*lgamma(nrow(om))
   }
 
 
