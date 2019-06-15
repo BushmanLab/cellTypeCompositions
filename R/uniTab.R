@@ -7,8 +7,8 @@
 ##' @param tab matrix or table of counts.  Rows correspond to lineages
 ##'     and columns to cell types.
 ##' @return \code{list} with elements \code{tab} - the rows of
-##'     \code{unique(tab)}, \code{n} - a vector of row counts, and
-##'     \code{row.index} - a mapping of the rows to the \code{tab}
+##'     \code{unique(tab)}, \code{n} - a vector of replicate row counts, and
+##'     \code{data.index.index} - a mapping of the rows to the \code{tab}
 ##'     argument to those of \code{uniTab(tab)[["tab"]]}.
 ##' @export
 ##' @author Charles Berry
@@ -19,4 +19,4 @@ uniTab <- function(tab){
         do.call(paste,as.data.frame(tab)),
         do.call(paste,as.data.frame(utab)))
     list(tab=utab,n=as.vector(table(tab.index)),
-         row.index = tab.index)}
+         data.index.index = tab.index)}
