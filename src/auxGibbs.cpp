@@ -12,36 +12,33 @@ using namespace arma;
 
   Author: Charles C. Berry
   Date: 22-04-2019
-
+        16-060-2019
 */
+
+#define MORECOLS 100L
+#define MAXCOLS 1000L
 
 // uniform dirichlet random numbers
 
-inline NumericVector rdirich( int n ){
-  NumericVector rg( n );
-  double rgsum = 0.0;
+inline vec rdirich( int n ){
+  vec rg( n );
   for (int i = 0; i<n; i++) {
-    rg[i]=Rf_rgamma(1.0,1.0);
-    rgsum+=rg[i];
+    rg(i)=Rf_rgamma(1.0,1.0);
   }
-  for (int i = 0; i<n; i++) {
-    rg[i]/=rgsum;
-  }
-  return rg;
+  return rg/sum(rg);
 }
 
 
 // log probability vector 
-inline rowvec logprob(NumericVector tabrow, NumericMatrix& om, NumericMatrix& eta,
-			    NumericVector& etaN, int etaLast, mat& rho){
-
-  mat om2 = as<mat>(om);
-  rho.cols(0L,etaLast) = trans( om2 ) * as<mat>(eta).cols(0L,etaLast);
+inline rowvec logprob(irowvec& tabrow, mat& om, mat& eta,
+		      rowvec& etaN, int etaLast, mat& rho){
+    
+  rho.cols(0L,etaLast) = trans( om ) * eta.cols(0L,etaLast);
   rowvec rhoSum = sum( rho.cols(0L, etaLast), 0L);
-  int tabsum = sum(as<vec>(tabrow));
-  rowvec logpr = as<rowvec>(tabrow) * log(rho.cols(0L,etaLast));
-  logpr = logpr - (tabsum + 1L)*log(rhoSum) +
-      log(as<rowvec>(etaN).subvec(0L,etaLast) );
+  int tabsum = sum(tabrow);
+  rowvec logpr = tabrow * log(rho.cols(0L,etaLast));
+  logpr = logpr - (tabsum + 1L) * log(rhoSum) +
+    log(etaN.subvec(0L,etaLast));
   return logpr;
 }
 
@@ -56,101 +53,89 @@ inline int newIndex(rowvec logpr){
 }
 
 // [[Rcpp::export]]
-List auxGibbs(List wtab, NumericMatrix om, 
-	      NumericMatrix eta_orig,
-	      NumericVector etaN_orig,
-	      IntegerVector diToEta_orig,
-	      int etaM = 0L,
-	      int auxM = 5L, double alpha = 100.0,
-	      int ijvals = 0L,
-	      int verbose = 0L) {
+List auxGibbs(List wtab, arma::mat& om, 
+              arma::mat eta,
+              arma::rowvec etaN,
+              arma::ivec diToEta,
+              int etaM = 0L,
+              int auxM = 5L, double alpha = 100.0,
+              int ijvals = 0L,
+              int verbose = 0L) {
   // we get a list from R
   // pull std::vector<double> from R list
   // this is achieved through an implicit
   // call to Rcpp::as
-
-  NumericMatrix eta(clone(eta_orig));
-  NumericVector etaN(clone(etaN_orig));
-  IntegerVector diToEta(clone(diToEta_orig));
-
-  int etaCols = eta.ncol();
-  int J = om.nrow();
-  int K = om.ncol();
+  
+  int etaCols = eta.n_cols;
+  int J = om.n_rows;
+  int K = om.n_cols;
   mat rho(K, etaCols);
-  
-  
-  // NumericMatrix rho( K, etaCols );
-  // NumericVector rhoSum( etaCols );
-
-  double *etaNpt = REAL(etaN);
-  double *etapt = REAL(eta);
-
-  NumericMatrix tab = wtab["tab"];
-  IntegerVector di_orig = wtab["data.index"];
-  IntegerVector di(clone(di_orig));
+  imat tab = wtab["tab"];
+  ivec di = wtab["data.index"];
   di = di - 1L;
   int ndat = di.size();
-
+  
   int decN = 0L;
   int incNnew = 0L;
   int incNold = 0L;
-  for (int i=ijvals; i<ndat; i++){
+  for (int i=ijvals; i<ndat && etaM+auxM < etaCols; i++){
   
+    if (verbose>1L) Rprintf("i = %d\n",i);
+    
     int di2e = diToEta[ i ];
-
-
+    
+    
     double etaN1; // singletons need one less 
-    if (di2e >= 0L && etaNpt[ di2e] == 1.0){
+    if (di2e >= 0L && etaN( di2e ) == 1.0){
       etaN1 = 1;
-      etaNpt[ di2e ] = alpha/auxM;
+      etaN( di2e ) = alpha/auxM;
     }
     else
       { etaN1 = 0; 
-	if (di2e>=0L) etaNpt[ di2e ]--;
+	if (di2e>=0L) etaN( di2e )--;
       }
-
+    
     
     // sample auxM from prior
     for (int j = 0; j < auxM-etaN1; j++){
-      eta( _, j + etaM) = rdirich(J);
-      etaNpt[ j+etaM ] = alpha/auxM;
+      eta.col(j + etaM ) = rdirich(J);
+      etaN( j+etaM ) = alpha/auxM;
     }
     
     // rho and logprob
-
+    
+    irowvec tr = tab.row(di( i ));
     int newind =
-      newIndex(logprob(tab(di[ i ], _),om,eta,etaN,etaM+auxM-etaN1-1L,rho));
-
+      newIndex( logprob( tr, om, eta, etaN,  etaM + auxM - (int) etaN1 - 1L, rho));
+    
     // update-eta
-
+    
     if (etaN1){
       //singleton case
       if (newind == di2e)
 	{
 	  // retain di2e
-	  etaNpt[ di2e ] = 1;
+	  etaN( di2e ) = 1;
 	}
       else if (newind < etaM)
 	{
 	  //move di2e
-	  etaNpt[ newind ]++;
-	  diToEta[ i ] = newind;
+	  etaN( newind )++;
+	  diToEta( i ) = newind;
 	  // shift left
-	  std::copy(etaNpt+1L+di2e, etaNpt+etaM, etaNpt+di2e);
-	  std::copy(etapt + J * (1L + di2e ),
-		    etapt + J * ( etaM ),
-		    etapt + J * di2e );
+	  etaN.subvec(di2e, etaM-1L) = etaN.subvec(di2e+1L, etaM);
+	  eta.cols(di2e, etaM-1L) = eta.cols(di2e+1L, etaM);
 	  etaM--;
 	  decN++;
 	  for (int idi=0; idi<ndat; idi++) 
 	    if (diToEta[ idi ] >= di2e) diToEta[ idi ]--;
-	  // Rprintf("diToEta=%d\n",diToEta[ i ]);
+	  if (verbose > 1L) Rprintf("diToEta=%d\n",diToEta[ i ]);
 	}
       else
 	{
 	  // copy to di2e
-	  etaNpt[ di2e ] = 1;incNnew++;
-	  eta(_,di2e) = eta(_,newind);
+	  etaN( di2e ) = 1; incNnew++;
+	  eta.col(di2e) = eta.col(newind);
 	} 
     }
     else
@@ -158,29 +143,40 @@ List auxGibbs(List wtab, NumericMatrix om,
       {
 	if (newind >= etaM)
 	  {
-	    etaNpt[ etaM ] =1;
-	    if (newind>etaM) eta(_,etaM) = eta(_,newind);
-	    diToEta[ i ] = etaM;
+	    etaN( etaM ) =1;
+	    if (newind>etaM) eta.col(etaM) = eta.col(newind);
+	    diToEta( i ) = etaM;
 	    etaM++;
 	    incNnew++;
 	  }
 	else
 	  {
-	    etaNpt[ newind ]++;
-	    diToEta[ i ] = newind;
+	    etaN( newind )++;
+	    diToEta( i ) = newind;
 	    incNold++;
 	  }
-	
+      
       }
+    if (etaM+auxM >= etaCols){
+      int addCols = auxM > MORECOLS? auxM : MORECOLS ;
+      if (etaCols + addCols <= MAXCOLS){
+        etaCols += addCols;
+        eta.resize(J, etaCols); 
+        etaN.resize( etaCols );
+        rho.resize(K, etaCols);
+      }
+      if (verbose) Rprintf("eta has %d Columns\n", eta.n_cols);
+    }
   }
-
+  
+  if (etaM+auxM >= etaCols) warning("etaM+auxM = %d would have exceeded %d (maximum)", etaM+auxM, MAXCOLS);
   if (verbose)  Rprintf("delete = %d add = %d use existing = %d\n",
 			decN, incNnew, incNold);
   // return an R list; this is achieved
   // through an implicit call to Rcpp::wrap
   return List::create(_["eta"] = eta,
-		      _["etaN"] = etaN,
-		      _["dataToEta"] = diToEta,
-		      _["etaM"] = etaM);
+                      _["etaN"] = etaN,
+                      _["dataToEta"] = diToEta,
+                      _["etaM"] = etaM);
 }
 
