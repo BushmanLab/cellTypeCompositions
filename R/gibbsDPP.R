@@ -76,8 +76,6 @@ gibbsScan <- function(wtab,
   if (is.null(eta))
     eta <- array(0.0,c(nrow(om), etaCols))
   if (is.null(etaN)) etaN <- rep(0L, ncol(eta))
-  if (is.null(dataToEta)) dataToEta <- 
-			    rep(-1L,length(wtab$data.index))
   stopifnot( all( etaM >= dataToEta + 1L) )
   stopifnot(length(etaN)==ncol(eta),
 	    nrow(om) == ncol(wtab[["tab"]]))
