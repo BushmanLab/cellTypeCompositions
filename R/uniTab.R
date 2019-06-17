@@ -14,9 +14,10 @@
 ##' @author Charles Berry
 uniTab <- function(tab){
     tab <- unclass(as.matrix(tab))
+    rownames(tab) <- NULL
     utab <- unique(tab)
     tab.index <- match(
         do.call(paste,as.data.frame(tab)),
         do.call(paste,as.data.frame(utab)))
     list(tab=utab,n=as.vector(table(tab.index)),
-         data.index.index = tab.index)}
+         data.index = tab.index)}
