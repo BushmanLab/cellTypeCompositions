@@ -1,6 +1,8 @@
 
-#include <Rcpp.h>
+#include <RcppArmadillo.h>
 using namespace Rcpp;
+using namespace arma;
+// [[Rcpp::depends(RcppArmadillo)]]
 
 /* ctcomps.cpp
 
@@ -9,9 +11,8 @@ using namespace Rcpp;
 
    Author: Charles C. Berry
    Date: 13-03-2019
+         16-06-2018
 */
-
-
 
 
 /* rmultnm assumes that:
@@ -30,53 +31,48 @@ inline void rmultnm(int n, double* prob, int k, int* rn){
 }
 
 // [[Rcpp::export]]
-NumericMatrix samplePI(IntegerVector gi, NumericMatrix om, NumericVector pi0,
+NumericMatrix samplePI(arma::ivec gi, arma::mat& om, arma::rowvec pi0,
 		       int nkeep, int nthin = 1L, int nburn = 0L, double dprior = 1.0){
   int nsamps = (nkeep - 1L) * nthin + nburn + 1L;
   int isamp = 0L;
-  int nrom = om.nrow();
-  int ncom = om.ncol();
-  NumericVector rwom(nrom);
-  for (int i = 0; i<nrom; i++){
-    double xx = 0.0;
-    for (int j = 0L; j < ncom; j++) xx += om(i,j);
-    rwom(i) = xx;
-  }
-  int r = std::accumulate(gi.begin(), gi.end(), 0L);
+  int nrom = om.n_rows;
+  int ncom = om.n_cols;
+  vec rwom = sum(om,1L);
+  int r = sum( gi );
 
-  NumericVector pivec= clone(pi0);
-  NumericMatrix gammat(nrom, nkeep);
+  mat gammat(nrom, nkeep);
 
   for (int i=0L; i < nsamps; i++){
-    double rho_obs=std::inner_product(pivec.begin(),pivec.end(),rwom.begin(),0.0);
+    double rho_obs =  dot( pi0, rwom ); // observation prob
+    // sample unseen cells
     int R_minus_r = rnbinom(1L,r,rho_obs)[0L];
-    NumericVector pi_miss = pivec * (1.0 - rwom) / (1-rho_obs);
-    IntegerVector dropped_f(nrom);
-    rmultnm(R_minus_r, REAL(pi_miss),nrom,INTEGER(dropped_f));
-    NumericMatrix pi_given_gi(nrom,ncom); 
-    for (int j = 0L; j<ncom; j++) {
-      pi_given_gi( _, j ) = om( _, j ) * pivec;
-      double colsm = std::accumulate(pi_given_gi( _,j).begin(),pi_given_gi( _, j).end(),0.0);
-      pi_given_gi( _, j) = pi_given_gi( _, j)/colsm;
-    }
-    IntegerVector shuffled_f(nrom);
+    vec pi_miss = trans(pi0) % (1.0 - rwom) / (1-rho_obs);
+    ivec dropped_f(nrom);
+    rmultnm(R_minus_r, pi_miss.memptr(),nrom,dropped_f.memptr());
+
+    // sample true types of observed cells
+    mat pi_given_gi = om.each_col() % trans(pi0); // columnwise multiply
+    pi_given_gi.each_row() /= sum( pi_given_gi, 0L); // rowwise divide
+
+    ivec shuffled_f(nrom, fill::zeros);
     for (int j=0L; j<ncom; j++){
-      IntegerVector ftmp(nrom);
-      rmultnm( gi[j], REAL(pi_given_gi)+j*nrom, nrom, INTEGER(ftmp));
+      ivec ftmp(nrom);
+      rmultnm( gi[j], pi_given_gi.memptr() + j*nrom, nrom, ftmp.memptr());
       shuffled_f = shuffled_f + ftmp;
     }
-    NumericVector dirichlet_parm(nrom);
-    for (int j = 0; j<nrom; j++){ 
-      dirichlet_parm[j] = dprior + (double) (shuffled_f[j] + dropped_f[j]);
-    }
-    NumericVector gamma_vals(nrom);
+    
+    vec dirichlet_parm =  dprior + conv_to<vec>::from(shuffled_f +  dropped_f);
+    
+    rowvec gamma_vals(nrom);
     for (int j = 0; j<nrom; j++) gamma_vals[j] = Rf_rgamma(dirichlet_parm[j],1.0);
-
-    pivec = gamma_vals / std::accumulate(gamma_vals.begin(),gamma_vals.end(),0.0);
+    
+    pi0 = gamma_vals / sum(gamma_vals);
+    
     if ( (i >= nburn) && ((i-nburn)%nthin == 0L) )  
-      gammat(_, isamp++) = pivec * Rf_rgamma((double)(R_minus_r + r),1.0);
+      gammat.col(isamp++) = trans(pi0) * Rf_rgamma((double)(R_minus_r + r),1.0);
+
   }
 
-  return gammat;
+  return wrap(gammat);
 
 }
