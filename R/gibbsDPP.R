@@ -37,14 +37,18 @@ gibbsDPP <- function(
                      etaCols = 500L
                      )
 {
+  mc <- match.call()
   if (is.null(eta))
     eta <- array(0.0,c(nrow(om), etaCols))
   if (is.null(etaN)) etaN <- rep(0L, ncol(eta))
   if (is.null(dataToEta)) dataToEta <- 
-                            rep(-1L,length(wtab$data.index))
-  stopifnot( all( etaM >= dataToEta + 1L) )
-  auxGibbs(wtab, om, eta, etaN, dataToEta, etaM,
-           auxM , alpha , verbose )
+                            rep(0L,length(wtab$data.index))
+  stopifnot( all( etaM >= dataToEta) )
+  res <- auxGibbs(wtab, om, eta, etaN, dataToEta - 1L, etaM,
+                  auxM , alpha , verbose )
+  res[["dataToEta"]] <-  res[["dataToEta"]] + 1L
+  attr(res,"call") <- mc
+  res
 }
 
 
@@ -78,7 +82,7 @@ gibbsScan <- function(wtab,
   if (is.null(eta))
     eta <- array(0.0,c(nrow(om), etaCols))
   if (is.null(etaN)) etaN <- rep(0L, ncol(eta))
-  stopifnot( all( etaM >= dataToEta + 1L) )
+  stopifnot( all( etaM >= dataToEta) )
   stopifnot(length(etaN)==ncol(eta),
 	    nrow(om) == ncol(wtab[["tab"]]))
   stopifnot(nthin >= 1L)
@@ -86,8 +90,8 @@ gibbsScan <- function(wtab,
   if (ijvals!=0){
     if (etaM!=ijvals) warning("ijvals != etaM seems wrong")
     if (ncol(eta)!=ijvals) warning("ncol(eta) != ijvals is usually an error")
-    if (is.null(dataToEta) || any(dataToEta[1:ijvals]<0) )
-      stop("dataToEta[1:ijvals] must be given as non-negative integers")
+    if (is.null(dataToEta) || any(dataToEta[1:ijvals]<1) )
+      stop("dataToEta[1:ijvals] must be given as positive integers")
   } else {
     if (auxM == 0L) warning("auxM == 0 & ijvals == 0 is usually a mistake")
   }
@@ -127,11 +131,11 @@ gibbsScan <- function(wtab,
   }
 
 
-  pass2 <- list(eta=eta,etaN=etaN,dataToEta=dataToEta,etaM=etaM)
+  pass2 <- list(eta=eta,etaN=etaN, dataToEta = dataToEta - 1L, etaM=etaM)
 
   keepers <- list()
   isamp <- 0L
-  
+
   for (iscan in seq_len(nscans)){
     ## if there are updates, do them:
     pass1 <- pass2   
