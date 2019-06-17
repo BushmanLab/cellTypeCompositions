@@ -49,8 +49,10 @@ gibbsDPP <- function(
 
 
 ##' @rdname gibbsDPP
-##' @param nscans integer with value \code{nscans>=1L}. How many scans
+##' @param nkeep integer with value \code{nkeep>=1L}. How many scans
 ##'     to do.
+##' @param nthin how many iterations per saved value
+##' @param nburn discard this many iterations before saving any values
 ##' @param ctParms list of values for \code{nburn}, \code{ncore}, and
 ##'     \code{method} to pass to \code{\link{ctSampler}}
 ##' @param ijvals \code{0L} by default, but for splitting and merging
@@ -65,12 +67,12 @@ gibbsScan <- function(wtab,
 		      dataToEta=NULL, etaM=0L,
 		      alpha=1.0,auxM=10L,
 		      ctParms=NULL,
-		      nscans = 1L,
+		      nkeep = 1L, nthin=1L, nburn=0L,
 		      etaCols=500L,
 		      ijvals=0L,
 		      verbose=FALSE,
 		      ...){
-
+  mc <- match.call()
   if (is.null(eta))  eta <- array(0.0,c(nrow(om),etaCols))
   if (is.null(dataToEta)) dataToEta <- rep(-1L,length(wtab[["data.index"]]))
   if (is.null(eta))
@@ -79,7 +81,8 @@ gibbsScan <- function(wtab,
   stopifnot( all( etaM >= dataToEta + 1L) )
   stopifnot(length(etaN)==ncol(eta),
 	    nrow(om) == ncol(wtab[["tab"]]))
-
+  stopifnot(nthin >= 1L)
+  
   if (ijvals!=0){
     if (etaM!=ijvals) warning("ijvals != etaM seems wrong")
     if (ncol(eta)!=ijvals) warning("ncol(eta) != ijvals is usually an error")
@@ -88,8 +91,15 @@ gibbsScan <- function(wtab,
   } else {
     if (auxM == 0L) warning("auxM == 0 & ijvals == 0 is usually a mistake")
   }
-  
-  
+
+  if (auxM != 0L && etaM + auxM > ncol(eta)){
+    ## need to pad eta and etaN
+    padby  <- max(etaM+auxM, etaCols) - ncol(eta)
+    eta  <- cbind(eta,array(0.0, c(nrow(eta), padby)))
+    etaN <- c(etaN, rep(0.0, padby))
+  }
+
+  nscans <- (nkeep - 1L) * nthin + nburn + 1L
   ctp <- list(nburn=10L, ncore=1L, method="sampleX")
   ctp[names(ctParms)] <- ctParms
 
@@ -119,8 +129,9 @@ gibbsScan <- function(wtab,
 
   pass2 <- list(eta=eta,etaN=etaN,dataToEta=dataToEta,etaM=etaM)
 
-  logpst <- rep(0.0,nscans)
-
+  keepers <- list()
+  isamp <- 0L
+  
   for (iscan in seq_len(nscans)){
     ## if there are updates, do them:
     pass1 <- pass2   
@@ -147,16 +158,23 @@ gibbsScan <- function(wtab,
                         prop.table)
     
     pass2[["eta"]][, 1:pass2[["etaM"]] ] <- eta.tuned
-    logpst[ iscan ] <-
-      logpost(wtab, om, pass2[["eta"]], pass2[["etaN"]],
-	      pass2[["dataToEta"]],
-	      pass2[["etaM"]],
-	      alpha)
+
+    if ( (iscan > nburn) && (( iscan - nburn-1L ) %% nthin == 0L)){
+      keepers[[ isamp <- isamp + 1L]] <-
+        list(eta = pass2[["eta"]][, 1:pass2[["etaM"]]],
+             etaN = pass2[["etaN"]][ 1:pass2[["etaM"]]],
+             dataToEta = pass2[["dataToEta"]] + 1L,
+             etaM = pass2[["etaM"]],
+             logpost =
+               logpost(wtab, om, pass2[["eta"]], pass2[["etaN"]],
+                       pass2[["dataToEta"]],
+                       pass2[["etaM"]],
+                       alpha)
+             )}
     
   }
-  
-  list(last=pass2, launch=pass1, logpost=logpst)
-  
+  attr(keepers,"call") <- mc  
+  keepers
 }
 
 
