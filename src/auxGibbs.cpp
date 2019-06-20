@@ -31,24 +31,40 @@ inline vec rdirich( int n ){
 
 // log probability vector 
 inline rowvec logprob(irowvec& tabrow, mat& om, mat& eta,
-		      rowvec& etaN, int etaLast, mat& rho){
-    
-  rho.cols(0L,etaLast) = trans( om ) * eta.cols(0L,etaLast);
-  rowvec rhoSum = sum( rho.cols(0L, etaLast), 0L);
-  int tabsum = sum(tabrow);
-  rowvec logpr = tabrow * log(rho.cols(0L,etaLast));
-  logpr = logpr - (tabsum + 1L) * log(rhoSum) +
-    log(etaN.subvec(0L,etaLast));
+		      rowvec& etaN, int etaLast){
+  rowvec logpr(etaLast);
+  int J = eta.n_rows;
+  int K = om.n_cols;
+  for (int rc = 0; rc<etaLast; rc++){
+    double rhosum = 0.0;
+    int tabsum = 1L;
+    double logprc = 0.0;
+ 
+    for (int k = 0; k<K; k++){
+      tabsum+=tabrow(k);
+      double rhoelt = 0.0;
+      for (int j=0;j<J;j++) rhoelt+=om(j,k)*eta(j,rc);
+      logprc+= tabrow(k) * log(rhoelt);
+      rhosum+= rhoelt;
+    }
+    logprc-= (double) tabsum * log(rhosum);
+    logprc+= log( etaN(rc));
+    logpr(rc) = logprc;
+  }
   return logpr;
 }
 
 // sample one index
 inline int newIndex(rowvec logpr){
-  rowvec pr = cumsum(exp(logpr-max(logpr)));
-  double prsum = as_scalar(pr.tail(1L));
-  double ur = Rf_runif(0.0,prsum);
+  double maxlogpr = max(logpr);
+  double prcum = 0.0;
+  for (int i =0;i<logpr.size(); i++){
+    prcum += exp(logpr(i)-maxlogpr);
+    logpr(i) = prcum;
+  }  
+  double ur = Rf_runif(0.0,prcum);
   int index=0L;
-  for (; pr[index] < ur && index<pr.size(); index++);
+  for (; logpr[index] < ur && index<logpr.size(); index++);
   return index;
 }
 
@@ -69,8 +85,7 @@ List auxGibbs(List wtab, arma::mat& om,
   int etaCols = eta.n_cols;
   int J = om.n_rows;
   int K = om.n_cols;
-  mat rho(K, etaCols);
-  imat tab = wtab["tab"];
+    imat tab = wtab["tab"];
   ivec di = wtab["data.index"];
   di = di - 1L;
   int ndat = di.size();
@@ -106,7 +121,7 @@ List auxGibbs(List wtab, arma::mat& om,
     
     irowvec tr = tab.row(di( i ));
     int newind =
-      newIndex( logprob( tr, om, eta, etaN,  etaM + auxM - (int) etaN1 - 1L, rho));
+      newIndex( logprob( tr, om, eta, etaN,  etaM + auxM - (int) etaN1));
     
     // update-eta
     
@@ -163,7 +178,6 @@ List auxGibbs(List wtab, arma::mat& om,
         etaCols += addCols;
         eta.resize(J, etaCols); 
         etaN.resize( etaCols );
-        rho.resize(K, etaCols);
       }
       if (verbose) Rprintf("eta has %d Columns\n", eta.n_cols);
     }
