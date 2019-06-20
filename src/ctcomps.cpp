@@ -21,6 +21,9 @@ using namespace arma;
    On exit rn should have a multinomial sample (or zeroes if n==0)
 */
 
+#define NDEBUG
+
+
 /* do what FixupProb in main/random.c does */
 
 inline void rmultnm(int n, double* prob, int k, int* rn){
