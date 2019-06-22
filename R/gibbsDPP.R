@@ -88,7 +88,7 @@ gibbsScan <- function(wtab,
   stopifnot(nthin >= 1L)
   
   if (ijvals!=0){
-    if (etaM!=ijvals) warning("ijvals != etaM seems wrong")
+    if (etaM!=ijvals) stop("ijvals != etaM (0L, by default) is not permitted")
     if (ncol(eta)!=ijvals) warning("ncol(eta) != ijvals is usually an error")
     if (is.null(dataToEta) || any(dataToEta[1:ijvals]<1) )
       stop("dataToEta[1:ijvals] must be given as positive integers")
@@ -107,6 +107,7 @@ gibbsScan <- function(wtab,
   ctp <- list(nburn=10L, ncore=1L, method="sampleX")
   ctp[names(ctParms)] <- ctParms
 
+  ## JN have this as the prior, but it seems worng
   logpriorC <-
     function(etaN,alpha){
       if (alpha==0.0) return( 0.0 )
@@ -115,6 +116,20 @@ gibbsScan <- function(wtab,
 	sum(lgamma(etaN)) -
 	sum(log(alpha+0:(n-1)))
     }
+
+  ## Antoniak has this as the prior
+  logPriorAnt <- function(etaN,alpha){
+  m <- table(etaN)
+  i <- unique(sort(etaN))
+  stopifnot(i>0L)
+  n <- sum(i*m)
+  num <- lfactorial( n ) + sum(m * log(alpha))
+  denom <- 
+    sum( m *log(i) ) + sum(lfactorial(m)) +
+    sum( log(alpha + 1:n - 1) )
+  num - denom
+  }
+
   logpost <- function(wtab,om,eta,etaN,dataToEta,etaM,alpha){
     etaN <- etaN[1:etaM]
     eta <- eta[, 1:etaM, drop=FALSE]
@@ -126,8 +141,8 @@ gibbsScan <- function(wtab,
       marglogpost(eta[,1L+uniq.indexes[,2], drop=FALSE],
                   om,wtab[["tab"]][uniq.indexes[,1], , drop=FALSE])
     margliksum <- sum( marglik * uniq.sums)
-    ## Equations 6 and 10 Jain and Neal, 2007 yield: 
-    margliksum+logpriorC(etaN,alpha)+etaM*lgamma(nrow(om))
+    ## Equations 6 and 10 Jain and Neal, 2007 yield the sum of: 
+    c(loglik=margliksum, logprior=logPriorAnt(etaN,alpha)+etaM*lgamma(nrow(om)))
   }
 
 

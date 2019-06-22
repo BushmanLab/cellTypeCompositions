@@ -84,8 +84,7 @@ List auxGibbs(List wtab, arma::mat& om,
   
   int etaCols = eta.n_cols;
   int J = om.n_rows;
-  int K = om.n_cols;
-    imat tab = wtab["tab"];
+  imat tab = wtab["tab"];
   ivec di = wtab["data.index"];
   di = di - 1L;
   int ndat = di.size();
@@ -93,7 +92,7 @@ List auxGibbs(List wtab, arma::mat& om,
   int decN = 0L;
   int incNnew = 0L;
   int incNold = 0L;
-  for (int i=ijvals; i<ndat && etaM+auxM < etaCols; i++){
+  for (int i=ijvals; i<ndat && etaM+auxM <= etaCols; i++){
   
     if (verbose>1L) Rprintf("i = %d\n",i);
     
@@ -111,6 +110,7 @@ List auxGibbs(List wtab, arma::mat& om,
       }
     
     
+
     // sample auxM from prior
     for (int j = 0; j < auxM-etaN1; j++){
       eta.col(j + etaM ) = rdirich(J);
@@ -172,7 +172,7 @@ List auxGibbs(List wtab, arma::mat& om,
 	  }
       
       }
-    if (etaM+auxM >= etaCols){
+    if (etaM+auxM > etaCols){
       int addCols = auxM > MORECOLS? auxM : MORECOLS ;
       if (etaCols + addCols <= MAXCOLS){
         etaCols += addCols;
@@ -183,7 +183,7 @@ List auxGibbs(List wtab, arma::mat& om,
     }
   }
   
-  if (etaM+auxM >= etaCols) warning("etaM+auxM = %d would have exceeded %d (maximum)", etaM+auxM, MAXCOLS);
+  if (etaM+auxM > etaCols) warning("etaM+auxM = %d would have exceeded %d (maximum)", etaM+auxM, MAXCOLS);
   if (verbose)  Rprintf("delete = %d add = %d use existing = %d\n",
 			decN, incNnew, incNold);
   // return an R list; this is achieved
