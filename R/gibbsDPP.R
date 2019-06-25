@@ -182,7 +182,7 @@ gibbsScan <- function(wtab,
       keepers[[ isamp <- isamp + 1L]] <-
         list(eta = pass2[["eta"]][, 1:pass2[["etaM"]]],
              etaN = pass2[["etaN"]][ 1:pass2[["etaM"]]],
-             dataToEta = pass2[["dataToEta"]] + 1L,
+             dataToEta = as.vector(pass2[["dataToEta"]] + 1L),
              etaM = pass2[["etaM"]],
              logpost =
                logpost(wtab, om, pass2[["eta"]], pass2[["etaN"]],
