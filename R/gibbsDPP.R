@@ -1,7 +1,9 @@
 ##' Auxiliary Gibbs Sampler for Dirichlet Process Prior 
 ##'
 ##' The auxiliary Gibbs sampler for a Dirichlet Process prior is
-##' implemented.
+##' implemented. The usual call is to \code{gibbsScan}, but
+##' \code{update} can be used to continue a chain (with no arguments)
+##' possibly changing the parameters.
 ##' @title Dirichlet Process Prior Gibbs Sampler
 ##' @param wtab the result of \code{\link{uniTab}}
 ##' @param om the object returned by \code{\link{exOGS}(paramList)}
@@ -62,8 +64,12 @@ gibbsDPP <- function(
 ##' @param ijvals \code{0L} by default, but for splitting and merging
 ##'     a value of 2 is needed. Users should not usually change the
 ##'     default.
-##' @param ... unused at present
 ##' @export
+##' @examples
+##' tab <- diag(10, nrow = 3)[ rep(1:3,2), ] +
+##'   rbinom(18,2,0.5)
+##' uop <- prop.table(diag(3)+0.05,1)
+##' gibbsScan(uniTab(tab), uop)
 gibbsScan <- function(wtab,
 		      om,
 		      eta=NULL,
@@ -192,9 +198,29 @@ gibbsScan <- function(wtab,
              )}
     
   }
-  attr(keepers,"call") <- mc  
+  attr(keepers,"call") <- mc
+  class(keepers) <- "ctScan"
   keepers
 }
 
 
-
+##' @rdname gibbsDPP
+##' @param object a \dQuote{ctScan} object
+##' @param elt integer to select a sample to use as the starting point
+##' @param ... parameters to revise using \code{update} 
+##' @method update ctScan
+##' @S3method update ctScan
+update.ctScan <- function(object, elt=length(object), ...){
+    mc <- match.call()
+    objcall <- attr(object,"call")
+    newparms <- list(...)
+    newnames <- names(newparms)
+    newind <- match(newnames,names(objcall),0L)
+    if (any(newnames == 0L)) stop( "couldn't match ", newnames[newind==0L])
+    objcall[newnames] <- newparms
+    if (is.null(elt)) elt <- length(object)
+    elt  <- object[[elt]]
+    for ( i in c("eta","etaN","dataToEta","etaM")) objcall[[i]] <- as.name(i)
+    objcall[["update.call"]] <- mc
+    eval(objcall,elt, parent.frame())
+}
