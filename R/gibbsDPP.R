@@ -113,8 +113,8 @@ gibbsScan <- function(wtab,
   ctp <- list(nburn=10L, ncore=1L, method="sampleX")
   ctp[names(ctParms)] <- ctParms
 
-  ## JN have this as the prior, but it seems worng
-  logpriorC <-
+  ## JN and Liue et al have this as the prior
+  logPriorC <-
     function(etaN,alpha){
       if (alpha==0.0) return( 0.0 )
       n <- sum(etaN)
@@ -148,7 +148,7 @@ gibbsScan <- function(wtab,
                   om,wtab[["tab"]][uniq.indexes[,1], , drop=FALSE])
     margliksum <- sum( marglik * uniq.sums)
     ## Equations 6 and 10 Jain and Neal, 2007 yield the sum of: 
-    c(loglik=margliksum, logprior=logPriorAnt(etaN,alpha)+etaM*lgamma(nrow(om)))
+    c(loglik=margliksum, logprior=logPriorC(etaN,alpha)+etaM*lgamma(nrow(om)))
   }
 
 
