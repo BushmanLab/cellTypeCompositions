@@ -56,14 +56,18 @@ gibbsDPP <- function(
 
 ##' @rdname gibbsDPP
 ##' @param nkeep integer with value \code{nkeep>=1L}. How many scans
-##'     to do.
+##'   to do.
 ##' @param nthin how many iterations per saved value
 ##' @param nburn discard this many iterations before saving any values
 ##' @param ctParms list of values for \code{nburn}, \code{ncore}, and
-##'     \code{method} to pass to \code{\link{ctSampler}}
+##'   \code{method} to pass to \code{\link{ctSampler}}
 ##' @param ijvals \code{0L} by default, but for splitting and merging
-##'     a value of 2 is needed. Users should not usually change the
-##'     default.
+##'   a value of 2 is needed. Users should not usually change the
+##'   default.
+##' @param ab if \code{NULL} treat \code{alpha} as a fixed
+##'   value. Otherwise the first two elemenbts are rthe shape and rate
+##'   parameters of Gamma prior for \code{alpha}.
+##' @importFrom stats rbeta rgamma dgamma runif
 ##' @export
 ##' @examples
 ##' tab <- diag(10, nrow = 3)[ rep(1:3,2), ] +
@@ -80,6 +84,7 @@ gibbsScan <- function(wtab,
 		      nkeep = 1L, nthin=1L, nburn=0L,
 		      etaCols=500L,
 		      ijvals=0L,
+                      ab=c(0.0001,0.0001),
 		      verbose=FALSE,
 		      ...){
   mc <- match.call()
@@ -92,7 +97,7 @@ gibbsScan <- function(wtab,
   stopifnot(length(etaN)==ncol(eta),
 	    nrow(om) == ncol(wtab[["tab"]]))
   stopifnot(nthin >= 1L)
-  
+  stopifnot(all(ab>0), length(ab)==0 || length(ab==2))
   if (ijvals!=0){
     if (etaM!=ijvals) stop("ijvals != etaM (0L, by default) is not permitted")
     if (ncol(eta)!=ijvals) warning("ncol(eta) != ijvals is usually an error")
@@ -136,6 +141,17 @@ gibbsScan <- function(wtab,
   num - denom
   }
 
+
+  ## Escobar and West, Page 10  (Chapter in Dey et al, 2012)
+  ralpha <- function(alpha,a,b,Istar,I){
+    eta <- rbeta(1,alpha+1,I)
+    shape <- a + Istar - 1
+    rate <- (b - log(eta))
+    plus1 <- runif(1, -shape, I*rate) < 0.0
+    rgamma(1,shape+plus1, rate)
+  }
+  
+
   logpost <- function(wtab,om,eta,etaN,dataToEta,etaM,alpha){
     etaN <- etaN[1:etaM]
     eta <- eta[, 1:etaM, drop=FALSE]
@@ -151,8 +167,10 @@ gibbsScan <- function(wtab,
     c(loglik=margliksum, logprior=logPriorC(etaN,alpha)+etaM*lgamma(nrow(om)))
   }
 
-
-  pass2 <- list(eta=eta,etaN=etaN, dataToEta = dataToEta - 1L, etaM=etaM)
+  N <- sum(wtab[["n"]])
+  log.dalpha <- 0.0
+  pass2 <- list(eta=eta,etaN=etaN, dataToEta = dataToEta - 1L,
+                etaM=etaM, alpha=alpha)
 
   keepers <- list()
   isamp <- 0L
@@ -184,17 +202,23 @@ gibbsScan <- function(wtab,
     
     pass2[["eta"]][, 1:pass2[["etaM"]] ] <- eta.tuned
 
+    if (!is.null(ab)) {
+      alpha <- ralpha(alpha,ab[1],ab[2],pass2[["etaM"]], N)
+      log.dalpha <- dgamma(alpha, ab[1], ab[2], log=TRUE)
+    }
+    
     if ( (iscan > nburn) && (( iscan - nburn-1L ) %% nthin == 0L)){
       keepers[[ isamp <- isamp + 1L]] <-
         list(eta = pass2[["eta"]][, 1:pass2[["etaM"]]],
              etaN = pass2[["etaN"]][ 1:pass2[["etaM"]]],
              dataToEta = as.vector(pass2[["dataToEta"]] + 1L),
              etaM = pass2[["etaM"]],
+             alpha = alpha,
              logpost =
                logpost(wtab, om, pass2[["eta"]], pass2[["etaN"]],
                        pass2[["dataToEta"]],
                        pass2[["etaM"]],
-                       alpha)
+                       alpha) + log.dalpha
              )}
     
   }
@@ -220,7 +244,7 @@ update.ctScan <- function(object, elt=length(object), ...){
     objcall[newnames] <- newparms
     if (is.null(elt)) elt <- length(object)
     elt  <- object[[elt]]
-    for ( i in c("eta","etaN","dataToEta","etaM")) objcall[[i]] <- as.name(i)
+    for ( i in c("eta","etaN","dataToEta","etaM","alpha")) objcall[[i]] <- as.name(i)
     objcall[["update.call"]] <- mc
     eval(objcall,elt, parent.frame())
 }
