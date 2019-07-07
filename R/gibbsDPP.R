@@ -88,6 +88,12 @@ gibbsScan <- function(wtab,
 		      verbose=FALSE,
 		      ...){
   mc <- match.call()
+  stopifnot(all(om>=0.0))
+  if (any(om==0.0)){
+    om[om==0.0] <- .Machine[["double.eps"]]
+    warning("Converted zeroes in om to machine epsilon")
+  }
+  
   if (is.null(eta))  eta <- array(0.0,c(nrow(om),etaCols))
   if (is.null(dataToEta)) dataToEta <- rep(-1L,length(wtab[["data.index"]]))
   if (is.null(eta))
