@@ -15,7 +15,7 @@ using namespace arma;
         16-060-2019
 */
 
-#define MORECOLS 100L
+#define MORECOLS 10L
 #define MAXCOLS 1000L
 
 // uniform dirichlet random numbers
@@ -173,12 +173,14 @@ List auxGibbs(List wtab, arma::mat& om,
       
       }
     if (etaM+auxM > etaCols){
-      int addCols = auxM > MORECOLS? auxM : MORECOLS ;
+      int addCols = MORECOLS;
       if (etaCols + addCols <= MAXCOLS){
         etaCols += addCols;
         eta.resize(J, etaCols); 
         etaN.resize( etaCols );
-      }
+      } else {
+	stop("Cannot resize eta");
+	  }
       if (verbose) Rprintf("eta has %d Columns\n", eta.n_cols);
     }
   }
