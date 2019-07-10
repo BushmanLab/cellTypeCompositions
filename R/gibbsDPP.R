@@ -56,17 +56,26 @@ gibbsDPP <- function(
 
 ##' @rdname gibbsDPP
 ##' @param nkeep integer with value \code{nkeep>=1L}. How many scans
-##'   to do.
+##'     to do.
 ##' @param nthin how many iterations per saved value
 ##' @param nburn discard this many iterations before saving any values
 ##' @param ctParms list of values for \code{nburn}, \code{ncore}, and
-##'   \code{method} to pass to \code{\link{ctSampler}}
+##'     \code{method} to pass to \code{\link{ctSampler}}
 ##' @param ijvals \code{0L} by default, but for splitting and merging
-##'   a value of 2 is needed. Users should not usually change the
-##'   default.
+##'     a value of 2 is needed. Users should not usually change the
+##'     default.
 ##' @param ab if \code{NULL} treat \code{alpha} as a fixed
-##'   value. Otherwise the first two elemenbts are rthe shape and rate
-##'   parameters of Gamma prior for \code{alpha}.
+##'     value. Otherwise the first two elemenbts are rthe shape and
+##'     rate parameters of Gamma prior for \code{alpha}.
+##' @param dpriors The default value is \code{c(1.0,1.0)}. A smaller
+##'     value for \code{dpriors[1]} causes draws from the prior for
+##'     \code{eta} to be overdispersed. A larger value for
+##'     \code{dpriors[2]} causes posterior samples of \code{eta} to
+##'     shrink towards equality. Non-default value can be used to
+##'     influence the behavior of the sampler. The computations of the
+##'     posterior do not account for non-default values of
+##'     \code{dpriors} and should be ignored when non-default values
+##'     are used.
 ##' @importFrom stats rbeta rgamma dgamma runif
 ##' @export
 ##' @examples
@@ -85,7 +94,7 @@ gibbsScan <- function(wtab,
 		      etaCols=500L,
 		      ijvals=0L,
                       ab=c(0.0001,0.0001),
-		      verbose=FALSE,
+		      verbose=FALSE, dpriors=c(1.0,1.0),
 		      ...){
   mc <- match.call()
   stopifnot(all(om>=0.0))
@@ -93,7 +102,7 @@ gibbsScan <- function(wtab,
     om[om==0.0] <- .Machine[["double.eps"]]
     warning("Converted zeroes in om to machine epsilon")
   }
-  
+  stopifnot( length( dpriors ) == 2L )
   if (is.null(eta))  eta <- array(0.0,c(nrow(om),etaCols))
   if (is.null(dataToEta)) dataToEta <- rep(-1L,length(wtab[["data.index"]]))
   if (is.null(eta))
@@ -192,7 +201,8 @@ gibbsScan <- function(wtab,
 		       auxM=auxM,
 		       alpha=alpha,
 		       ijvals=ijvals,
-		       verbose=verbose)
+		       verbose=verbose,
+                       dprior=dpriors[1])
     
 
     eta.by.ct <- table(pass2[["dataToEta"]],
@@ -202,6 +212,7 @@ gibbsScan <- function(wtab,
                                   pass2[["eta"]][, 1:pass2[["etaM"]], drop=FALSE ],
                                   nkeep=1, # makes no sense otherwise
                                   nburn=ctp[["nburn"]],
+                                  dprior=dpriors[2],
                                   ncores=ctp[["ncore"]],
                                   method=ctp[["method"]]),
                         prop.table)
