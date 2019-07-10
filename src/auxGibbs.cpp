@@ -20,10 +20,10 @@ using namespace arma;
 
 // uniform dirichlet random numbers
 
-inline vec rdirich( int n ){
+inline vec rdirich( int n, double dprior=1.0 ){
   vec rg( n );
   for (int i = 0; i<n; i++) {
-    rg(i)=Rf_rgamma(1.0,1.0);
+    rg(i)=Rf_rgamma(dprior, 1.0);
   }
   return rg/sum(rg);
 }
@@ -76,7 +76,8 @@ List auxGibbs(List wtab, arma::mat& om,
               int etaM = 0L,
               int auxM = 5L, double alpha = 100.0,
               int ijvals = 0L,
-              int verbose = 0L) {
+              int verbose = 0L,
+	      double dprior=1.0) {
   // we get a list from R
   // pull std::vector<double> from R list
   // this is achieved through an implicit
@@ -113,7 +114,7 @@ List auxGibbs(List wtab, arma::mat& om,
 
     // sample auxM from prior
     for (int j = 0; j < auxM-etaN1; j++){
-      eta.col(j + etaM ) = rdirich(J);
+      eta.col(j + etaM ) = rdirich(J, dprior);
       etaN( j+etaM ) = alpha/auxM;
     }
     
