@@ -6,15 +6,17 @@
 ##' @title uniTab Combine Duplicate Rows
 ##' @param tab matrix or table of counts.  Rows correspond to lineages
 ##'     and columns to cell types.
+##' @param omitNullRows logical, if \code{TRUE} omit rows with only zero cells
 ##' @return \code{list} with elements \code{tab} - the rows of
 ##'     \code{unique(tab)}, \code{n} - a vector of replicate row counts, and
 ##'     \code{data.index.index} - a mapping of the rows to the \code{tab}
 ##'     argument to those of \code{uniTab(tab)[["tab"]]}.
 ##' @export
 ##' @author Charles Berry
-uniTab <- function(tab){
+uniTab <- function(tab, omitNullRows=TRUE){
     tab <- unclass(as.matrix(tab))
     rownames(tab) <- NULL
+    if (omitNullRows && any(rz <- rowSums(tab)==0)) tab <- tab[!rz,]
     utab <- unique(tab)
     tab.index <- match(
         do.call(paste,as.data.frame(tab)),
