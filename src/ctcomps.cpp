@@ -45,7 +45,7 @@ NumericMatrix samplePI(arma::ivec gi, arma::mat& om, arma::rowvec pi0,
     double rho_obs =  dot( pi0, rwom ); // observation prob
     int R_minus_r;
     ivec dropped_f(nrom);
-    if (rho_obs < 1.0-DBL_EPSILON){
+    if (rho_obs < 1.0 - 4L * DBL_EPSILON){
       // sample unseen cells
       R_minus_r = rnbinom(1L,r,rho_obs)[0L];
       vec pi_miss = trans(pi0) % (1.0 - rwom) / (1-rho_obs);
