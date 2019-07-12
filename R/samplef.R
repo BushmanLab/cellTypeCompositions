@@ -21,7 +21,8 @@ sampleParent <- function(n,eta,R,uop){
     stopifnot( uop <= 1.0)
     k <- nrow(eta)
     rho <- t(uop) %*% eta
-    if (any(colSums(rho)>1.0)) stop("eta and/or uop misspecified") 
+    if (any( colSums(rho) > 1.0 + 2 *.Machine$double.eps ) )
+        stop("eta and/or uop misspecified") 
     rhoMiss <- 1 - colSums(rho)
     pr.done <- apply(rho,2,cumsum)
     res <- array(0L,c(sum(n),nrow(eta)))
