@@ -216,7 +216,7 @@ gibbsScan <- function(wtab,
                                   ncores=ctp[["ncore"]],
                                   method=ctp[["method"]]),
                         prop.table)
-    
+
     pass2[["eta"]][, 1:pass2[["etaM"]] ] <- eta.tuned
 
     if (!is.null(ab)) {
