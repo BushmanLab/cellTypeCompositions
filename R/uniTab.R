@@ -9,10 +9,13 @@
 ##' @param omitNullRows logical, if \code{TRUE} omit rows with only
 ##'     zero cells
 ##' @return \code{list} with elements \code{tab} - the rows of
-##'     \code{unique(tab)}, \code{n} - a vector of replicate row
-##'     counts, \code{data.index.index} - a mapping of the rows to the
+##'     \code{unique(tab)},
+##'     \code{n} - a vector of replicate row
+##'     counts,
+##'     \code{data.index} - a mapping of the rows to the
 ##'     \code{tab} argument to those of \code{uniTab(tab)[["tab"]]},
-##'     and \code{omitted} - \code{NULL} if no rows were omitted, or
+##'     and
+##'     \code{omitted} - \code{NULL} if no rows were omitted, or
 ##'     an object such that \code{inverse.rle(result$omitted)} is a
 ##'     logical vector indicating which table rows were all zeros.
 ##' @export
@@ -25,6 +28,8 @@ uniTab <- function(tab, omitNullRows=TRUE){
         omitted <- rle(rz)
     } else {
         omitted <- NULL
+    }
+    
     utab <- unique(tab)
     tab.index <- match(
         do.call(paste,as.data.frame(tab)),
