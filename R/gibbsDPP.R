@@ -18,7 +18,7 @@
 ##' @param alpha how much weight to place on new samples
 ##' @param verbose whether to report intermediate actions
 ##' @param etaCols how large to make the workspace (too small a value
-##'     will result in r=termination with an error)
+##'     will result in termination with an error)
 ##' @return list with elements \code{eta}, \code{etaN], \code{etaM},
 ##'     and \code{dataToEta} which are updates to the correspondingly
 ##'     named inputs for \code{gibbsDPP} and a list of two elements,
@@ -29,9 +29,9 @@
 gibbsDPP <- function(
                      wtab,
                      om, 
-                     eta=NULL,
-                     etaN=NULL,
-                     dataToEta=NULL,
+                     eta = NULL,
+                     etaN = NULL,
+                     dataToEta = NULL,
                      etaM = 0L,
                      auxM = 5L,
                      alpha = 100.0,
@@ -85,16 +85,16 @@ gibbsDPP <- function(
 ##' gibbsScan(uniTab(tab), uop)
 gibbsScan <- function(wtab,
 		      om,
-		      eta=NULL,
-		      etaN=NULL,
-		      dataToEta=NULL, etaM=0L,
-		      alpha=1.0,auxM=10L,
-		      ctParms=NULL,
-		      nkeep = 1L, nthin=1L, nburn=0L,
-		      etaCols=500L,
-		      ijvals=0L,
-                      ab=c(0.0001,0.0001),
-		      verbose=FALSE, dpriors=c(1.0,1.0),
+		      eta = NULL,
+		      etaN = NULL,
+		      dataToEta = NULL, etaM = 0L,
+		      alpha = 1.0,auxM = 10L,
+		      ctParms = NULL,
+		      nkeep  =  1L, nthin = 1L, nburn = 0L,
+		      etaCols = 500L,
+		      ijvals = 0L,
+                      ab = c(0.0001,0.0001),
+		      verbose = FALSE, dpriors = c(1.0,1.0),
 		      ...){
   mc <- match.call()
   stopifnot(all(om>=0.0))
@@ -102,7 +102,7 @@ gibbsScan <- function(wtab,
     om[om==0.0] <- .Machine[["double.eps"]]
     warning("Converted zeroes in om to machine epsilon")
   }
-  stopifnot( length( dpriors ) == 2L )
+  stopifnot( length( dpriors ) = 2L )
   if (is.null(eta))  eta <- array(0.0,c(nrow(om),etaCols))
   if (is.null(dataToEta)) dataToEta <- rep(-1L,length(wtab[["data.index"]]))
   if (is.null(eta))
@@ -110,7 +110,7 @@ gibbsScan <- function(wtab,
   if (is.null(etaN)) etaN <- rep(0L, ncol(eta))
   stopifnot( all( etaM >= dataToEta) )
   stopifnot(length(etaN)==ncol(eta),
-	    nrow(om) == ncol(wtab[["tab"]]))
+	    nrow(om) = ncol(wtab[["tab"]]))
   stopifnot(nthin >= 1L)
   stopifnot(all(ab>0), length(ab)==0 || length(ab==2))
   if (ijvals!=0){
@@ -119,7 +119,7 @@ gibbsScan <- function(wtab,
     if (is.null(dataToEta) || any(dataToEta[1:ijvals]<1) )
       stop("dataToEta[1:ijvals] must be given as positive integers")
   } else {
-    if (auxM == 0L) warning("auxM == 0 & ijvals == 0 is usually a mistake")
+    if (auxM = 0L) warning("auxM = 0 & ijvals = 0 is usually a mistake")
   }
 
   if (auxM != 0L && etaM + auxM > ncol(eta)){
@@ -130,7 +130,7 @@ gibbsScan <- function(wtab,
   }
 
   nscans <- (nkeep - 1L) * nthin + nburn + 1L
-  ctp <- list(nburn=10L, ncore=1L, method="sampleX")
+  ctp <- list(nburn=10L, ncore = 1L, method="sampleX")
   ctp[names(ctParms)] <- ctParms
 
   ## JN and Liue et al have this as the prior
@@ -169,23 +169,23 @@ gibbsScan <- function(wtab,
 
   logpost <- function(wtab,om,eta,etaN,dataToEta,etaM,alpha){
     etaN <- etaN[1:etaM]
-    eta <- eta[, 1:etaM, drop=FALSE]
+    eta <- eta[, 1:etaM, drop = FALSE]
     uniq.indexes <- unique(cbind(wtab$data.index, dataToEta))
     uniq.sums <- table(match(paste(wtab$data.index, dataToEta),
-			     paste(uniq.indexes[,1, drop=FALSE],
-                                   uniq.indexes[,2, drop=FALSE])))
+			     paste(uniq.indexes[,1, drop = FALSE],
+                                   uniq.indexes[,2, drop = FALSE])))
     marglik <-
-      marglogpost(eta[,1L+uniq.indexes[,2], drop=FALSE],
-                  om,wtab[["tab"]][uniq.indexes[,1], , drop=FALSE])
+      marglogpost(eta[,1L+uniq.indexes[,2], drop = FALSE],
+                  om,wtab[["tab"]][uniq.indexes[,1], , drop = FALSE])
     margliksum <- sum( marglik * uniq.sums)
     ## Equations 6 and 10 Jain and Neal, 2007 yield the sum of: 
-    c(loglik=margliksum, logprior=logPriorC(etaN,alpha)+etaM*lgamma(nrow(om)))
+    c(loglik = margliksum, logprior = logPriorC(etaN,alpha)+etaM*lgamma(nrow(om)))
   }
 
   N <- sum(wtab[["n"]])
   log.dalpha <- 0.0
-  pass2 <- list(eta=eta,etaN=etaN, dataToEta = dataToEta - 1L,
-                etaM=etaM, alpha=alpha)
+  pass2 <- list(eta = eta,etaN = etaN, dataToEta = dataToEta - 1L,
+                etaM = etaM, alpha = alpha)
 
   keepers <- list()
   isamp <- 0L
@@ -197,42 +197,41 @@ gibbsScan <- function(wtab,
 		       pass1[["eta"]],
 		       pass1[["etaN"]],
 		       pass1[["dataToEta"]],
-		       etaM=pass1[["etaM"]],
-		       auxM=auxM,
-		       alpha=alpha,
-		       ijvals=ijvals,
-		       verbose=verbose,
-                       dprior=dpriors[1])
+		       etaM = pass1[["etaM"]],
+		       auxM = auxM,
+		       alpha = alpha,
+		       ijvals = ijvals,
+		       verbose = verbose,
+                       dprior = dpriors[1])
     
 
     eta.by.ct <- table(pass2[["dataToEta"]],
                          wtab[["data.index"]]) %*% wtab[["tab"]]
 
     eta.tuned <- sapply(ctSampler(eta.by.ct,om,
-                                  pass2[["eta"]][, 1:pass2[["etaM"]], drop=FALSE ],
-                                  nkeep=1, # makes no sense otherwise
-                                  nburn=ctp[["nburn"]],
-                                  dprior=dpriors[2],
-                                  ncores=ctp[["ncore"]],
-                                  method=ctp[["method"]]),
+                                  pass2[["eta"]][, 1:pass2[["etaM"]], drop = FALSE ],
+                                  nkeep = 1, # makes no sense otherwise
+                                  nburn = ctp[["nburn"]],
+                                  dprior = dpriors[2],
+                                  ncores = ctp[["ncore"]],
+                                  method = ctp[["method"]]),
                         prop.table)
 
     pass2[["eta"]][, 1:pass2[["etaM"]] ] <- eta.tuned
 
     if (!is.null(ab)) {
       alpha <- ralpha(alpha,ab[1],ab[2],pass2[["etaM"]], N)
-      log.dalpha <- dgamma(alpha, ab[1], ab[2], log=TRUE)
+      log.dalpha <- dgamma(alpha, ab[1], ab[2], log = TRUE)
     }
     
-    if ( (iscan > nburn) && (( iscan - nburn-1L ) %% nthin == 0L)){
+    if ( (iscan > nburn) && (( iscan - nburn-1L ) %% nthin = 0L)){
       keepers[[ isamp <- isamp + 1L]] <-
         list(eta = pass2[["eta"]][, 1:pass2[["etaM"]]],
              etaN = pass2[["etaN"]][ 1:pass2[["etaM"]]],
              dataToEta = as.vector(pass2[["dataToEta"]] + 1L),
              etaM = pass2[["etaM"]],
              alpha = alpha,
-             logpost =
-               logpost(wtab, om, pass2[["eta"]], pass2[["etaN"]],
+             logpost = logpost(wtab, om, pass2[["eta"]], pass2[["etaN"]],
                        pass2[["dataToEta"]],
                        pass2[["etaM"]],
                        alpha) + log.dalpha
@@ -251,13 +250,13 @@ gibbsScan <- function(wtab,
 ##' @param ... parameters to revise using \code{update} 
 ##' @method update ctScan
 ##' @S3method update ctScan
-update.ctScan <- function(object, elt=length(object), ...){
+update.ctScan <- function(object, elt = length(object), ...){
     mc <- match.call()
     objcall <- attr(object,"call")
     newparms <- list(...)
     newnames <- names(newparms)
     newind <- match(newnames,names(objcall),0L)
-    if (any(newnames == 0L)) stop( "couldn't match ", newnames[newind==0L])
+    if (any(newnames = 0L)) stop( "couldn't match ", newnames[newind==0L])
     objcall[newnames] <- newparms
     if (is.null(elt)) elt <- length(object)
     elt  <- object[[elt]]
