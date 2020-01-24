@@ -11,7 +11,9 @@ using namespace arma;
   type proportions.
 
   Author: Charles C. Berry
-  Date: 22-04-2019
+  Date: 24-01-2020
+        10-01-2020
+        22-04-2019
         16-060-2019
 */
 
@@ -29,17 +31,43 @@ inline vec rdirich( int n, double dprior=1.0 ){
 }
 
 
-// log probability vector 
+// log probability of r given p and lambda
+double logprobp( int r, double p, double lambda ){
+  double logpr;
+  if ( ISNA(lambda) ){
+    logpr = -log( p );
+  }
+  else
+    {
+      if (lambda<DOUBLE_XMIN) lambda = DOUBLE_XMIN;
+      logpr =
+	((double) r - 1.0) * (log( p ) + log( lambda )) -
+	(double) r * log1p( - lambda * (1.0 - p )) + log1p( -lambda );
+    }
+  return logpr;
+}
+
+// vectorized log probability of r given p and lambda
+
+inline rowvec logprob_p( int r, double p, rowvec lambda ){
+  rowvec result(lambda.size());
+  for (int i = 0L; i<lambda.size(); i++) 
+    result[i] = logprobp( r, p, lambda[i] );
+  return result;
+}    
+
+// log probability vector (sans multinomial coefficient)
+
 inline rowvec logprob(irowvec& tabrow, mat& om, mat& eta,
-		      rowvec& etaN, int etaLast){
+	       rowvec& etaN, int etaLast, double lambda){
   rowvec logpr(etaLast);
   int J = eta.n_rows;
   int K = om.n_cols;
   for (int rc = 0; rc<etaLast; rc++){
     double rhosum = 0.0;
-    int tabsum = 1L;
+    int tabsum = 0L;
     double logprc = 0.0;
- 
+
     for (int k = 0; k<K; k++){
       tabsum+=tabrow(k);
       double rhoelt = 0.0;
@@ -48,11 +76,13 @@ inline rowvec logprob(irowvec& tabrow, mat& om, mat& eta,
       rhosum+= rhoelt;
     }
     logprc-= (double) tabsum * log(rhosum);
+    logprc+= logprobp( tabsum, rhosum, lambda );
     logprc+= log( etaN(rc));
     logpr(rc) = logprc;
   }
   return logpr;
 }
+
 
 // sample one index
 inline int newIndex(rowvec logpr){
