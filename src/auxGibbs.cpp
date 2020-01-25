@@ -19,6 +19,8 @@ using namespace arma;
 
 #define MORECOLS 10L
 #define MAXCOLS 1000L
+#define MORESIZE 10L
+#define MAXSIZE 10L
 
 // uniform dirichlet random numbers
 
@@ -103,8 +105,13 @@ List auxGibbs(List wtab, arma::mat& om,
               arma::mat eta,
               arma::rowvec etaN,
               arma::ivec diToEta,
+	      arma::rowvec lambda,
+	      arma::rowvec lambdaN,
+	      arma::ivec diToLambda,
               int etaM = 0L,
               int auxM = 5L, double alpha = 100.0,
+	      int lambdaM = 0L,
+	      int auxLambdaM = 5L, double alphaLambda = 5.0,
               int ijvals = 0L,
               int verbose = 0L,
 	      double dprior=1.0) {
@@ -114,22 +121,28 @@ List auxGibbs(List wtab, arma::mat& om,
   // call to Rcpp::as
   
   int etaCols = eta.n_cols;
+  int lambdaSize = lambda.size();
   int J = om.n_rows;
   imat tab = wtab["tab"];
   ivec di = wtab["data.index"];
   di = di - 1L;
   int ndat = di.size();
-  
+
   int decN = 0L;
   int incNnew = 0L;
   int incNold = 0L;
-  for (int i=ijvals; i<ndat && etaM+auxM <= etaCols; i++){
+
+  int decLambdaN = 0L;
+  int incLambdaNnew = 0L;
+  int incLambdaNold = 0L;
+
+  for (int i=ijvals;
+       i<ndat && etaM+auxM <= etaCols && lambdaM+auxLambdaM <= lambdaSize;
+       i++){
   
     if (verbose>1L) Rprintf("i = %d\n",i);
     
     int di2e = diToEta[ i ];
-    
-    
     double etaN1; // singletons need one less 
     if (di2e >= 0L && etaN( di2e ) == 1.0){
       etaN1 = 1;
@@ -140,8 +153,17 @@ List auxGibbs(List wtab, arma::mat& om,
 	if (di2e>=0L) etaN( di2e )--;
       }
     
+    int di2lam = diToLambda[ i ];
+    double lambdaN1; // singletons need one less 
+    if (di2lam >= 0L && lambdaN( di2lam ) == 1.0){
+      lambdaN1 = 1.0;
+      lambdaN( di2lam ) = alphaLambda/auxLambdaM;
+    }
+    else
+      { lambdaN1 = 0; 
+	if (di2lam>=0L) lambdaN( di2lam )--;
+      }
     
-
     // sample auxM from prior
     for (int j = 0; j < auxM-etaN1; j++){
       eta.col(j + etaM ) = rdirich(J, dprior);
@@ -149,10 +171,13 @@ List auxGibbs(List wtab, arma::mat& om,
     }
     
     // rho and logprob
+    // initially use lambdaVal = NA_REAL;
+    double lambdaVal = (di2lam < 0 ) ? NA_REAL : lambda( di2lam );
     
     irowvec tr = tab.row(di( i ));
     int newind =
-      newIndex( logprob( tr, om, eta, etaN,  etaM + auxM - (int) etaN1));
+      newIndex(logprob( tr, om, eta, etaN,
+			etaM + auxM - (int) etaN1, lambdaVal));
     
     // update-eta
     
@@ -214,16 +239,101 @@ List auxGibbs(List wtab, arma::mat& om,
 	  }
       if (verbose) Rprintf("eta has %d Columns\n", eta.n_cols);
     }
+
+
+    // update-lambda
+
+    double rhosum = (double) sum( trans(eta.col(newind))*om );
+    newind = newIndex( logprob_p( arma::sum(tr), rhosum, lambda ));
+
+    if (lambdaN1){
+      //singleton case
+      if (newind == di2lam)
+	{
+	  // rlambdain di2e
+	  lambdaN( di2lam ) = 1;
+	}
+      else if (newind < lambdaM)
+	{
+	  //move di2e
+	  lambdaN( newind )++;
+	  diToLambda( i ) = newind;
+	  // shift left
+	  lambdaN.subvec(di2lam, lambdaM-1L) = lambdaN.subvec(di2lam+1L, lambdaM);
+	  lambda.subvec(di2e, lambdaM-1L) = lambda.subvec(di2e+1L, lambdaM);
+	  lambdaM--;
+	  decLambdaN++;
+	  for (int idi=0; idi<ndat; idi++) 
+	    if (diToLambda[ idi ] >= di2lam) diToLambda[ idi ]--;
+	  if (verbose > 1L) Rprintf("diToLambda=%d\n",diToLambda[ i ]);
+	}
+      else
+	{
+	  // copy to di2lam
+	  lambdaN( di2lam ) = 1; incLambdaNnew++;
+	  lambda( di2lam ) = lambda( newind );
+	} 
+    }
+    else
+      // initial run or lambdaN[ di2lam ] >= 2
+      {
+	if (newind >= lambdaM)
+	  {
+	    lambdaN( lambdaM ) =1;
+	    if (newind>lambdaM) lambda(lambdaM) = lambda(newind);
+	    diToLambda( i ) = lambdaM;
+	    lambdaM++;
+	    incLambdaNnew++;
+	  }
+	else
+	  {
+	    lambdaN( newind )++;
+	    diToLambda( i ) = newind;
+	    incLambdaNold++;
+	  }
+      
+      }
+    if (lambdaM+auxLambdaM > lambdaSize){
+      int addSize = MORESIZE;
+      if (lambdaSize + addSize <= MAXSIZE){
+        lambdaSize += addSize;
+        lambda.resize( lambdaSize ); 
+        lambdaN.resize( lambdaSize );
+      } else {
+	stop("Cannot resize lambda");
+	  }
+      if (verbose) Rprintf("lambda has %d Elts\n", lambda.n_elem);
+    }
+
+
+
+    
   }
   
-  if (etaM+auxM > etaCols) warning("etaM+auxM = %d would have exceeded %d (maximum)", etaM+auxM, MAXCOLS);
-  if (verbose)  Rprintf("delete = %d add = %d use existing = %d\n",
-			decN, incNnew, incNold);
+  if (etaM+auxM > etaCols)
+    warning("etaM+auxM = %d would have exceeded %d (maximum)", etaM+auxM, MAXCOLS);
+  
+  if (lambdaM+auxLambdaM > lambdaSize)
+    warning("lambdaM+auxLambdaM = %d would have exceeded %d (maximum)",
+	    lambdaM+auxLambdaM, MAXSIZE);
+  
+  if (verbose)  {
+    Rprintf("delete Eta= %d add = %d use existing = %d ",
+	    decN, incNnew, incNold);
+    Rprintf("delete Lambda= %d add = %d use existing = %d\n",
+	    decLambdaN, incLambdaNnew, incLambdaNold);
+  }
+  
   // return an R list; this is achieved
   // through an implicit call to Rcpp::wrap
   return List::create(_["eta"] = eta,
                       _["etaN"] = etaN,
                       _["dataToEta"] = diToEta,
-                      _["etaM"] = etaM);
+                      _["etaM"] = etaM,
+		      _["lambda"] = lambda,
+                      _["lambdaN"] = lambdaN,
+                      _["dataToLambda"] = diToLambda,
+                      _["lambdaM"] = lambdaM
+		      );
 }
 
