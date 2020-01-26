@@ -243,8 +243,17 @@ List auxGibbs(List wtab, arma::mat& om,
 
     // update-lambda
 
+    // sample lambdaM from prior
+    for (int j = 0; j < auxLambdaM-lambdaN1; j++){
+      lambda(j + lambdaM ) = Rf_rbeta(1.0,1.0);
+      lambdaN( j+lambdaM ) = alphaLambda/auxLambdaM;
+    }
+
     double rhosum = (double) sum( trans(eta.col(newind))*om );
-    newind = newIndex( logprob_p( arma::sum(tr), rhosum, lambda ));
+    newind = newIndex(
+		      logprob_p( arma::sum(tr), rhosum, lambda.head(lambdaM+auxLambdaM) ) +
+		      log( lambdaN.head( lambdaM + auxLambdaM))
+		      );
 
     if (lambdaN1){
       //singleton case
@@ -294,6 +303,11 @@ List auxGibbs(List wtab, arma::mat& om,
       
       }
     if (lambdaM+auxLambdaM > lambdaSize){
+      if (verbose) {
+	Rprintf("lambda has %d Elts ", lambda.n_elem);
+	Rprintf("lambdaSize = %d lambdaM = %d auxLambdaM = %d\n",
+		lambdaSize, lambdaM, auxLambdaM);
+      }
       int addSize = MORESIZE;
       if (lambdaSize + addSize <= MAXSIZE){
         lambdaSize += addSize;

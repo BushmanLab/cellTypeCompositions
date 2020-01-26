@@ -32,11 +32,20 @@ gibbsDPP <- function(
                      eta = NULL,
                      etaN = NULL,
                      dataToEta = NULL,
+                     lambda = NULL,
+                     lambdaN = NULL,
+                     dataToLambda = NULL,
                      etaM = 0L,
                      auxM = 5L,
                      alpha = 100.0,
+                     lambdaM = 0L,
+                     auxLambdaM = 5L,
+                     alphaLambda = 1.0,
                      verbose = 0L,
-                     etaCols = 500L
+                     etaCols = 500L,
+                     lambdaSize = 10L,
+                     dprior=1.0,
+                     ijvals=0L
                      )
 {
   mc <- match.call()
@@ -46,9 +55,33 @@ gibbsDPP <- function(
   if (is.null(dataToEta)) dataToEta <- 
                             rep(0L,length(wtab$data.index))
   stopifnot( all( etaM >= dataToEta) )
-  res <- auxGibbs(wtab, om, eta, etaN, dataToEta - 1L, etaM,
-                  auxM , alpha , verbose )
+
+  if (is.null(lambda))
+      lambda <- rep(as.double(NA), lambdaSize)
+  if (is.null(lambdaN)) lambdaN <- rep(0L, length(lambda))
+  if (is.null(dataToLambda)) dataToLambda <-
+                                 rep(0L,length(wtab$data.index))
+  stopifnot( all( lambdaM >= dataToLambda ) )
+  
+  res <- auxGibbs(wtab,
+                  om,
+                  eta,
+                  etaN,
+                  dataToEta - 1L,
+                  lambda,
+                  lambdaN,
+                  dataToLambda - 1L,
+                  etaM,
+                  auxM,
+                  alpha,
+                  lambdaM,
+                  auxLambdaM,
+                  alphaLambda,
+                  ijvals,
+                  verbose,
+                  dprior)
   res[["dataToEta"]] <-  res[["dataToEta"]] + 1L
+    res[["dataToLambda"]] <-  res[["dataToLambda"]] + 1L
   attr(res,"call") <- mc
   res
 }
@@ -102,7 +135,7 @@ gibbsScan <- function(wtab,
     om[om==0.0] <- .Machine[["double.eps"]]
     warning("Converted zeroes in om to machine epsilon")
   }
-  stopifnot( length( dpriors ) = 2L )
+  stopifnot( length( dpriors ) == 2L )
   if (is.null(eta))  eta <- array(0.0,c(nrow(om),etaCols))
   if (is.null(dataToEta)) dataToEta <- rep(-1L,length(wtab[["data.index"]]))
   if (is.null(eta))
@@ -110,7 +143,7 @@ gibbsScan <- function(wtab,
   if (is.null(etaN)) etaN <- rep(0L, ncol(eta))
   stopifnot( all( etaM >= dataToEta) )
   stopifnot(length(etaN)==ncol(eta),
-	    nrow(om) = ncol(wtab[["tab"]]))
+	    nrow(om) == ncol(wtab[["tab"]]))
   stopifnot(nthin >= 1L)
   stopifnot(all(ab>0), length(ab)==0 || length(ab==2))
   if (ijvals!=0){
@@ -119,7 +152,7 @@ gibbsScan <- function(wtab,
     if (is.null(dataToEta) || any(dataToEta[1:ijvals]<1) )
       stop("dataToEta[1:ijvals] must be given as positive integers")
   } else {
-    if (auxM = 0L) warning("auxM = 0 & ijvals = 0 is usually a mistake")
+    if (auxM == 0L) warning("auxM == 0 & ijvals == 0 is usually a mistake")
   }
 
   if (auxM != 0L && etaM + auxM > ncol(eta)){
@@ -224,7 +257,7 @@ gibbsScan <- function(wtab,
       log.dalpha <- dgamma(alpha, ab[1], ab[2], log = TRUE)
     }
     
-    if ( (iscan > nburn) && (( iscan - nburn-1L ) %% nthin = 0L)){
+    if ( (iscan > nburn) && (( iscan - nburn-1L ) %% nthin == 0L)){
       keepers[[ isamp <- isamp + 1L]] <-
         list(eta = pass2[["eta"]][, 1:pass2[["etaM"]]],
              etaN = pass2[["etaN"]][ 1:pass2[["etaM"]]],
@@ -256,7 +289,7 @@ update.ctScan <- function(object, elt = length(object), ...){
     newparms <- list(...)
     newnames <- names(newparms)
     newind <- match(newnames,names(objcall),0L)
-    if (any(newnames = 0L)) stop( "couldn't match ", newnames[newind==0L])
+    if (any(newnames == 0L)) stop( "couldn't match ", newnames[newind==0L])
     objcall[newnames] <- newparms
     if (is.null(elt)) elt <- length(object)
     elt  <- object[[elt]]
