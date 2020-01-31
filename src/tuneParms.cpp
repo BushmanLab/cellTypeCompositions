@@ -17,8 +17,8 @@ inline void rmultnm(int n, double* prob, int k, int* rn){
 List sampleParms(
 		 List wtab,
 		 arma::mat& om,
-		 arma::ivec& dataToEta,
-		 arma::ivec& dataToLambda,
+		 arma::ivec dataToEta,
+		 arma::ivec dataToLambda,
 		 arma::mat& eta, int etaM, 
 		 arma::vec& lambda, arma::vec& lambdaN, int lambdaM,
 		 double dprior,
@@ -40,15 +40,8 @@ List sampleParms(
   imat eta_by_lambda_by_r(etaM, lambdaM, fill::zeros );
 
   for (int i = 0L; i<ndat; i++){
-    try {
-      eta_by_ct.row( dataToEta(i)) = eta_by_ct.row( dataToEta(i) ) + tab.row( di(i) );
-      eta_by_lambda_by_r( dataToEta(i) , dataToLambda(i) ) += r( di(i) );
-    }
-    catch (...) {
-      Rprintf("i = %d dataToEta(i)) = %d di(i) = %d dataToLambda(i)=%d\n", i,
-	      dataToEta(i), di(i), dataToLambda(i));
-      i = ndat;
-    }
+    eta_by_ct.row( dataToEta(i)) = eta_by_ct.row( dataToEta(i) ) + tab.row( di(i) );
+    eta_by_lambda_by_r( dataToEta(i) , dataToLambda(i) ) += r( di(i) );
   }
   if (verbose) Rprintf("eta.by.lambda.by.r\n");
   
@@ -114,7 +107,7 @@ List sampleParms(
 // update lambda
 
   for (int i = 0L; i<lambdaM; i++)
-    lambda(i) = Rf_rbeta(1.0 + sum(R.col(i)), 1.0 + lambda(i));
+    lambda(i) = Rf_rbeta(1.0 + sum(R.col(i)), 1.0 + lambdaN(i));
   
 //
 
