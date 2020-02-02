@@ -12,15 +12,15 @@ using namespace arma;
 
   Author: Charles C. Berry
   Date: 24-01-2020
-        10-01-2020
-        22-04-2019
-        16-060-2019
+  10-01-2020
+  22-04-2019
+  16-060-2019
 */
 
 #define MORECOLS 10L
 #define MAXCOLS 1000L
 #define MORESIZE 10L
-#define MAXSIZE 10L
+#define MAXSIZE 100L
 
 // uniform dirichlet random numbers
 
@@ -34,6 +34,7 @@ inline vec rdirich( int n, double dprior=1.0 ){
 
 
 // log probability of r given p and lambda
+// [[Rcpp::export]]
 double logprobp( int r, double p, double lambda ){
   double logpr;
   if ( ISNA(lambda) ){
@@ -50,7 +51,7 @@ double logprobp( int r, double p, double lambda ){
 }
 
 // vectorized log probability of r given p and lambda
-
+// [[Rcpp::export]]
 inline rowvec logprob_p( int r, double p, rowvec lambda ){
   rowvec result(lambda.size());
   for (int i = 0L; i<lambda.size(); i++) 
@@ -59,9 +60,9 @@ inline rowvec logprob_p( int r, double p, rowvec lambda ){
 }    
 
 // log probability vector (sans multinomial coefficient)
-
+// [[Rcpp::export]]
 inline rowvec logprob(irowvec& tabrow, mat& om, mat& eta,
-	       rowvec& etaN, int etaLast, double lambda){
+		      rowvec& etaN, int etaLast, double lambda){
   rowvec logpr(etaLast);
   int J = eta.n_rows;
   int K = om.n_cols;
@@ -87,6 +88,7 @@ inline rowvec logprob(irowvec& tabrow, mat& om, mat& eta,
 
 
 // sample one index
+// [[Rcpp::export]]
 inline int newIndex(rowvec logpr){
   double maxlogpr = max(logpr);
   double prcum = 0.0;
@@ -100,8 +102,15 @@ inline int newIndex(rowvec logpr){
   return index;
 }
 
+/* assume
+   imat tab = wtab["tab"];
+   ivec di = wtab["data.index"];
+   di = di - 1L;
+   di, dataTo[Eta|Lambda] are zero based
+*/
+
 // [[Rcpp::export]]
-List auxGibbs(List wtab, arma::mat& om, 
+List auxGibbs(arma::imat& tab, arma::ivec& di, arma::mat& om, 
               arma::mat eta,
               arma::rowvec etaN,
               arma::ivec diToEta,
@@ -123,11 +132,7 @@ List auxGibbs(List wtab, arma::mat& om,
   int etaCols = eta.n_cols;
   int lambdaSize = lambda.size();
   int J = om.n_rows;
-  imat tab = wtab["tab"];
-  ivec di = wtab["data.index"];
-  di = di - 1L;
   int ndat = di.size();
-
   int decN = 0L;
   int incNnew = 0L;
   int incNold = 0L;
@@ -194,8 +199,9 @@ List auxGibbs(List wtab, arma::mat& om,
 	  etaN( newind )++;
 	  diToEta( i ) = newind;
 	  // shift left
-	  etaN.subvec(di2e, etaM-1L) = etaN.subvec(di2e+1L, etaM);
-	  eta.cols(di2e, etaM-1L) = eta.cols(di2e+1L, etaM);
+	  etaN.shed_col(di2e);
+	  eta.shed_col(di2e);
+	  etaCols--;
 	  etaM--;
 	  decN++;
 	  for (int idi=0; idi<ndat; idi++) 
@@ -236,10 +242,9 @@ List auxGibbs(List wtab, arma::mat& om,
         etaN.resize( etaCols );
       } else {
 	stop("Cannot resize eta");
-	  }
+      }
       if (verbose) Rprintf("eta has %d Columns\n", eta.n_cols);
     }
-
 
     // update-lambda
 
@@ -251,15 +256,16 @@ List auxGibbs(List wtab, arma::mat& om,
 
     double rhosum = (double) sum( trans(eta.col(newind))*om );
     newind = newIndex(
-		      logprob_p( arma::sum(tr), rhosum, lambda.head(lambdaM+auxLambdaM) ) +
+		      logprob_p( arma::sum(tr), rhosum,
+				 lambda.head(lambdaM+auxLambdaM) ) +
 		      log( lambdaN.head( lambdaM + auxLambdaM))
 		      );
-
+       
     if (lambdaN1){
       //singleton case
       if (newind == di2lam)
 	{
-	  // rlambdain di2e
+	  // retain di2lam
 	  lambdaN( di2lam ) = 1;
 	}
       else if (newind < lambdaM)
@@ -268,9 +274,10 @@ List auxGibbs(List wtab, arma::mat& om,
 	  lambdaN( newind )++;
 	  diToLambda( i ) = newind;
 	  // shift left
-	  lambdaN.subvec(di2lam, lambdaM-1L) = lambdaN.subvec(di2lam+1L, lambdaM);
-	  lambda.subvec(di2e, lambdaM-1L) = lambda.subvec(di2e+1L, lambdaM);
+	  lambdaN.shed_col(di2lam);
+	  lambda.shed_col(di2lam);
 	  lambdaM--;
+	  lambdaSize--;
 	  decLambdaN++;
 	  for (int idi=0; idi<ndat; idi++) 
 	    if (diToLambda[ idi ] >= di2lam) diToLambda[ idi ]--;
@@ -315,15 +322,11 @@ List auxGibbs(List wtab, arma::mat& om,
         lambdaN.resize( lambdaSize );
       } else {
 	stop("Cannot resize lambda");
-	  }
+      }
       if (verbose) Rprintf("lambda has %d Elts\n", lambda.n_elem);
     }
-
-
-
     
   }
-  
   if (etaM+auxM > etaCols)
     warning("etaM+auxM = %d would have exceeded %d (maximum)", etaM+auxM, MAXCOLS);
   
