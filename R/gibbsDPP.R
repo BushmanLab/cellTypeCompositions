@@ -179,19 +179,41 @@ gibbsScan <- function(wtab,
   }
   
 
-  logpost <- function(wtab,om,eta,etaN,dataToEta,etaM,alpha){
+  logpost <- function(tab,di,om,eta,etaN,dataToEta,etaM,alpha,
+                      lambda,lambdaN,dataToLambda,
+                      lambdaM,alphaLambda){
+    ## multinomial
     etaN <- etaN[1:etaM]
     eta <- eta[, 1:etaM, drop = FALSE]
-    uniq.indexes <- unique(cbind(wtab$data.index, dataToEta))
-    uniq.sums <- table(match(paste(wtab$data.index, dataToEta),
+    uniq.indexes <- unique(cbind(di, dataToEta))
+    uniq.sums <- table(match(paste(di, dataToEta),
                              paste(uniq.indexes[,1, drop = FALSE],
                                    uniq.indexes[,2, drop = FALSE])))
     marglik <-
-      marglogpost(eta[,1L+uniq.indexes[,2], drop = FALSE],
-                  om,wtab[["tab"]][uniq.indexes[,1], , drop = FALSE])
+      marglogpost(eta[,1L + uniq.indexes[,2], drop = FALSE],
+                  om,tab[ 1L + uniq.indexes[,1], , drop = FALSE])
     margliksum <- sum( marglik * uniq.sums)
-    ## Equations 6 and 10 Jain and Neal, 2007 yield the sum of: 
-    c(loglik = margliksum, logprior = logPriorC(etaN,alpha)+etaM*lgamma(nrow(om)))
+    ## Equations 6 and 10 Jain and Neal, 2007 yield 
+    logPriEta <- logPriorC(etaN,alpha)+etaM*lgamma(nrow(om))
+    lambdaN <- lambdaN[1:lambdaM]
+    lambda <- lambda[1:lambdaM]
+    logPriLambda <- logPriorC( lambdaN, alphaLambda ) # + lambdaM*log(1.0)
+    ## rho
+    uniq.indexes <- unique(cbind(di, dataToEta, dataToLambda))
+    uniq.sums <- table(match(paste(di, dataToEta, dataToLambda),
+                             paste(uniq.indexes[, 1, drop = FALSE],
+                                   uniq.indexes[, 2, drop = FALSE],
+                                   uniq.indexes[, 3, drop = FALSE])))
+    r <- rowSums(tab)
+    p <- t(om) %*% eta
+    logprp <- 
+        mapply(logprobp, #( r.elt, p.elt, lambda.elt)
+               r[1L+uniq.indexes[,1L]],
+               p[1L+uniq.indexes[,2L]],
+               lambda[1L+uniq.indexes[,3]])
+    logprho <- sum( uniq.sums * logprp )
+
+    sum(logprho, logPriLambda,logPriEta,margliksum)
   }
 
   mc <- match.call()
@@ -330,11 +352,13 @@ gibbsScan <- function(wtab,
                 dataToLambda = as.vector(dataToLambda + 1L),
                 lambdaM = lambdaM,
                 alpha = alpha,
-                alphaLambda = alphaLambda
-                ## logpost = logpost(wtab, om, pass2[["eta"]], pass2[["etaN"]],
-                ##                   pass2[["dataToEta"]],
-                ##                   pass2[["etaM"]],
-                ##                   alpha) + log.dalpha
+                alphaLambda = alphaLambda,
+                logpost =
+                  logpost(
+                    tab,di,om,eta,etaN,dataToEta,etaM,alpha,
+                    lambda,lambdaN,dataToLambda,
+                    lambdaM,alphaLambda) +
+                  log.dalpha + log.dalphaLambda
                 ))
   }
   
