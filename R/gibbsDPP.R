@@ -142,6 +142,7 @@ gibbsScan <- function(wtab,
 		      ijvals = 0L,
                       ab = c(0.0001,0.0001),
 		      verbose = FALSE, dpriors = c(1.0,1.0),
+                      keep = TRUE,
 		      ...){
   ## define helper functions:
 
@@ -264,7 +265,6 @@ gibbsScan <- function(wtab,
     lambda  <- c(lambda,rep(0.0, padby))
     lambdaN <- c(lambdaN, rep(0.0, padby))
   }
-
   
   tab <- I( wtab[["tab"]] ) # force copy
   di <- wtab[["data.index"]] - 1L
@@ -337,12 +337,17 @@ gibbsScan <- function(wtab,
       }
     }
     
-
-
     
+    log.posterior <-
+      with(pass2,
+           logpost(
+             tab, di, om, eta, etaN, dataToEta, etaM, alpha,
+             lambda, lambdaN, dataToLambda,
+             lambdaM, alphaLambda) +
+           log.dalpha + log.dalphaLambda)
     
     keepers[[ i ]] <-
-      with( pass2,
+      with(pass2,
            list(eta = eta[, 1:etaM],
                 etaN = etaN[ 1:etaM],
                 dataToEta = as.vector(dataToEta + 1L),
@@ -353,13 +358,12 @@ gibbsScan <- function(wtab,
                 lambdaM = lambdaM,
                 alpha = alpha,
                 alphaLambda = alphaLambda,
-                logpost =
-                  logpost(
-                    tab,di,om,eta,etaN,dataToEta,etaM,alpha,
-                    lambda,lambdaN,dataToLambda,
-                    lambdaM,alphaLambda) +
-                  log.dalpha + log.dalphaLambda
-                ))
+                logpost = log.posterior
+                ))[ keep ]
+             
+             
+
+
   }
   
   attr(keepers,"call") <- mc
