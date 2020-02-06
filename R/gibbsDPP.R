@@ -15,7 +15,7 @@
 ##'     sampled
 ##' @param etaM number of samples provided in the intialization
 ##' @param auxM how many auxiliary paramters to draw
-##' @param alpha how much weight to place on new samples
+##' @param alphaEta how much weight to place on new samples
 ##' @param verbose whether to report intermediate actions
 ##' @param etaCols how large to make the workspace (too small a value
 ##'     will result in termination with an error)
@@ -37,7 +37,7 @@ gibbsDPP <- function(
                      dataToLambda = NULL,
                      etaM = 0L,
                      auxM = 5L,
-                     alpha = 100.0,
+                     alphaEta = 100.0,
                      lambdaM = 0L,
                      auxLambdaM = 5L,
                      alphaLambda = 1.0,
@@ -79,7 +79,7 @@ gibbsDPP <- function(
                   dataToLambda,
                   etaM,
                   auxM,
-                  alpha,
+                  alphaEta,
                   lambdaM,
                   auxLambdaM,
                   alphaLambda,
@@ -106,9 +106,9 @@ gibbsDPP <- function(
 ##' @param ijvals \code{0L} by default, but for splitting and merging
 ##'     a value of 2 is needed. Users should not usually change the
 ##'     default.
-##' @param ab if \code{NULL} treat \code{alpha} as a fixed
+##' @param ab if \code{NULL} treat \code{alphaEta} as a fixed
 ##'     value. Otherwise the first two elemenbts are rthe shape and
-##'     rate parameters of Gamma prior for \code{alpha}.
+##'     rate parameters of Gamma prior for \code{alphaEta}.
 ##' @param dpriors The default value is \code{c(1.0,1.0)}. A smaller
 ##'     value for \code{dpriors[1]} causes draws from the prior for
 ##'     \code{eta} to be overdispersed. A larger value for
@@ -130,7 +130,7 @@ gibbsScan <- function(wtab,
 		      eta = NULL,
 		      etaN = NULL,
 		      dataToEta = NULL, etaM = 0L,
-		      alpha = 1.0,auxM = 10L,
+		      alphaEta = 1.0,auxEtaM = 10L,
                       lambda = NULL,
                       lambdaN = NULL,
                       dataToLambda = NULL, lambdaM = 0L,
@@ -140,7 +140,8 @@ gibbsScan <- function(wtab,
 		      etaCols = 500L,
                       lambdaSize = 20L,
 		      ijvals = 0L,
-                      ab = c(0.0001,0.0001),
+                      abEta = c(0.0001,0.0001),
+                      abLambda = c(1.0,1.0),
 		      verbose = FALSE, dpriors = c(1.0,1.0),
                       keep = TRUE,
 		      ...){
@@ -176,7 +177,7 @@ gibbsScan <- function(wtab,
     shape <- a + Istar - 1
     rate <- (b - log(eta))
     plus1 <- runif(1, -shape, I*rate) < 0.0
-    rgamma(1,shape+plus1, rate)
+    rgamma(1,shape+plus1, rate = rate)
   }
   
 
@@ -195,7 +196,7 @@ gibbsScan <- function(wtab,
                   om,tab[ 1L + uniq.indexes[,1], , drop = FALSE])
     margliksum <- sum( marglik * uniq.sums)
     ## Equations 6 and 10 Jain and Neal, 2007 yield 
-    logPriEta <- logPriorC(etaN,alpha)+etaM*lgamma(nrow(om))
+    logPriEta <- logPriorC(etaN,alphaEta)+etaM*lgamma(nrow(om))
     lambdaN <- lambdaN[1:lambdaM]
     lambda <- lambda[1:lambdaM]
     logPriLambda <- logPriorC( lambdaN, alphaLambda ) # + lambdaM*log(1.0)
@@ -206,15 +207,14 @@ gibbsScan <- function(wtab,
                                    uniq.indexes[, 2, drop = FALSE],
                                    uniq.indexes[, 3, drop = FALSE])))
     r <- rowSums(tab)
-    p <- t(om) %*% eta
+    p <- rowSums(t(om)) %*% eta
     logprp <- 
         mapply(logprobp, #( r.elt, p.elt, lambda.elt)
                r[1L+uniq.indexes[,1L]],
                p[1L+uniq.indexes[,2L]],
                lambda[1L+uniq.indexes[,3]])
     logprho <- sum( uniq.sums * logprp )
-
-    sum(logprho, logPriLambda,logPriEta,margliksum)
+    c(multinom=margliksum, n.obs=logprho,eta=logPriEta, lambda=logPriLambda)
   }
 
   mc <- match.call()
@@ -236,19 +236,20 @@ gibbsScan <- function(wtab,
   stopifnot(length(etaN)==ncol(eta),
             nrow(om) == ncol(wtab[["tab"]]))
   stopifnot(nthin >= 1L)
-  stopifnot(all(ab>0), length(ab)==0 || length(ab==2))
+  stopifnot(all(abEta>0), length(abEta)==0 || length(abEta==2))
+  stopifnot(all(abLambda>0), length(abLambda)==0 || length(abLambda==2))
   if (ijvals!=0){
     if (etaM!=ijvals) stop("ijvals != etaM (0L, by default) is not permitted")
     if (ncol(eta)!=ijvals) warning("ncol(eta) != ijvals is usually an error")
     if (is.null(dataToEta) || any(dataToEta[1:ijvals]<1) )
       stop("dataToEta[1:ijvals] must be given as positive integers")
   } else {
-    if (auxM == 0L) warning("auxM == 0 & ijvals == 0 is usually a mistake")
+    if (auxLambdaM == 0L) warning("auxLambdaM == 0 & ijvals == 0 is usually a mistake")
   }
 
-  if (auxM != 0L && etaM + auxM > ncol(eta)){
+  if (auxEtaM != 0L && etaM + auxEtaM > ncol(eta)){
     ## need to pad eta and etaN
-    padby  <- max(etaM+auxM, etaCols) - ncol(eta)
+    padby  <- max(etaM+auxEtaM, etaCols) - ncol(eta)
     eta  <- cbind(eta,array(0.0, c(nrow(eta), padby)))
     etaN <- c(etaN, rep(0.0, padby))
   }
@@ -278,7 +279,7 @@ gibbsScan <- function(wtab,
 
 
   N <- sum(wtab[["n"]])
-  log.dalpha <- 0.0
+  log.dalphaEta <- 0.0
   
   pass2 <- list(eta = eta,
                 etaN = etaN,
@@ -308,8 +309,8 @@ gibbsScan <- function(wtab,
                          pass1[["lambdaN"]],
                          pass1[["dataToLambda"]],
                          pass1[["etaM"]],
-                         auxM = auxM,
-                         alpha = alpha,
+                         auxM = auxEtaM,
+                         alpha = alphaEta,
                          pass1[["lambdaM"]],
                          auxLambdaM,
                          alphaLambda,
@@ -328,23 +329,26 @@ gibbsScan <- function(wtab,
                     pass2[["lambdaM"]],
                     dprior, dpriorLambda, verbose)
       
-      if (!is.null(ab)) {
-        alpha <- ralpha(alpha,ab[1],ab[2],pass2[["etaM"]], N)
-        log.dalpha <- dgamma(alpha, ab[1], ab[2], log = TRUE)
-        
-        alphaLambda <- ralpha(alphaLambda,ab[1],ab[2],pass2[["lambdaM"]], N)
-        log.dalphaLambda <- dgamma(alphaLambda, ab[1], ab[2], log = TRUE)
+      if (!is.null(abEta)) {
+        alphaEta <- ralpha(alphaEta,abEta[1],abEta[2],pass2[["etaM"]], N)
+        log.dalphaEta <- dgamma(alphaEta, abEta[1], abEta[2], log = TRUE)
       }
+      if (!is.null(abLambda)) {
+        alphaLambda <- ralpha(alphaLambda,abLambda[1],abLambda[2],pass2[["lambdaM"]], N)
+        log.dalphaLambda <- dgamma(alphaLambda, abLambda[1], abLambda[2], log = TRUE)
+      } else {
+        log.dalphaLambda <- 0.0
+        }
     }
     
     
     log.posterior <-
       with(pass2,
-           logpost(
-             tab, di, om, eta, etaN, dataToEta, etaM, alpha,
+           c(logpost(
+             tab, di, om, eta, etaN, dataToEta, etaM, alphaEta,
              lambda, lambdaN, dataToLambda,
-             lambdaM, alphaLambda) +
-           log.dalpha + log.dalphaLambda)
+             lambdaM, alphaLambda),
+             alpha.eta = log.dalphaEta, alpha.lambda = log.dalphaLambda))
     
     keepers[[ i ]] <-
       with(pass2,
@@ -356,7 +360,7 @@ gibbsScan <- function(wtab,
                 lambdaN = lambdaN[ 1:lambdaM],
                 dataToLambda = as.vector(dataToLambda + 1L),
                 lambdaM = lambdaM,
-                alpha = alpha,
+                alphaEta = alphaEta,
                 alphaLambda = alphaLambda,
                 logpost = log.posterior
                 ))[ keep ]
@@ -380,7 +384,7 @@ gibbsScan <- function(wtab,
 ##' @S3method update ctScan
 update.ctScan <- function(object, elt = length(object), ...){
   mc <- match.call()
-  nameOnly <- c("eta","etaN","dataToEta","etaM","alpha",
+  nameOnly <- c("eta","etaN","dataToEta","etaM","alphaEta",
                 "lambda","lambdaN","dataToLambda","lambdaM","alphaLambda")
   objcall <- attr(object,"call")
   newparms <- list(...)
