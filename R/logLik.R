@@ -48,7 +48,7 @@ marglogpost <- function(ex.Sample,ex.OGS,obs){
     psum <- colSums(rho)
     prop <- prop.table(rho,2)
     if (is.matrix(obs)) obs <- t( obs )
-    - log( psum ) + dmulti( obs, prop, log=TRUE)
+    dmulti( obs, prop, log=TRUE)
   }
 
 
