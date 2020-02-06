@@ -198,7 +198,7 @@ List auxGibbs(arma::imat& tab, arma::ivec& di, arma::mat& om,
 	  //move di2e
 	  etaN( newind )++;
 	  diToEta( i ) = newind;
-	  // shift left
+	  // shift left 
 	  etaN.shed_col(di2e);
 	  eta.shed_col(di2e);
 	  etaCols--;
@@ -254,12 +254,10 @@ List auxGibbs(arma::imat& tab, arma::ivec& di, arma::mat& om,
       lambdaN( j+lambdaM ) = alphaLambda/auxLambdaM;
     }
 
-    double rhosum = (double) sum( trans(eta.col(newind))*om );
-    newind = newIndex(
-		      logprob_p( arma::sum(tr), rhosum,
+    double rhosum = (double) accu( trans(eta.col(newind))*om );
+    newind = newIndex(logprob_p( arma::sum(tr), rhosum,
 				 lambda.head(lambdaM+auxLambdaM) ) +
-		      log( lambdaN.head( lambdaM + auxLambdaM))
-		      );
+		      log( lambdaN.head( lambdaM + auxLambdaM)));
        
     if (lambdaN1){
       //singleton case
