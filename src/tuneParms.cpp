@@ -21,15 +21,15 @@ List sampleParms(
 		 arma::ivec dataToEta,
 		 arma::ivec dataToLambda,
 		 arma::mat eta, int etaM, 
-		 arma::vec lambda, arma::vec& lambdaN, int lambdaM,
+		 arma::rowvec lambda, arma::vec& lambdaN, int lambdaM,
 		 double dprior,
 		 double dpriorLambda, int verbose=0L){
-  if (verbose) Rprintf("starting....\n");
+  if (verbose>1L) Rprintf("starting....\n");
   int J = om.n_rows;
   vec omsum = sum(om, 1L);
   ivec r = sum( tab, 1L); // rowSums
   int ndat = di.size();
-    if (verbose) Rprintf("inits\n");
+    if (verbose>1L) Rprintf("inits\n");
 // eta.by.ct
   imat eta_by_ct( etaM, J , fill::zeros );
 // eta.by.lambda.by.r
@@ -45,7 +45,7 @@ List sampleParms(
 // rho.tilde 
 
   vec rhocomp = 1.0 - vectorise(trans( omsum ) * eta.head_cols( etaM ));
-  mat rhoTilde = 1.0 - ( rhocomp * lambda.head( lambdaM).t() );
+  mat rhoTilde = 1.0 - ( rhocomp * lambda.head( lambdaM) );
   if (verbose>1L) Rprintf("rhoTilde\n");
 // R_minus_r
 
@@ -86,7 +86,7 @@ List sampleParms(
 // rho.vec 
   rhocomp = 1.0 - vectorise(trans(omsum) * eta.head_cols(etaM));
 // rho.tilde
-  rhoTilde = 1.0 - ( rhocomp * lambda.head( lambdaM).t() );
+  rhoTilde = 1.0 - ( rhocomp * lambda.head( lambdaM) );
   if (verbose>1L) Rprintf("rhoTilde\n");
 
   // R_minus_r
