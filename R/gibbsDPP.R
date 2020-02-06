@@ -13,12 +13,27 @@
 ##'     of sampled parameter vectors
 ##' @param dataToEta index from the original data to the value of eta
 ##'     sampled
+##' @param lambda (optional) initialization and workspace for the sampled
+##'     abundance parameters
+##' @param lambdaN (optional) initialization and workspace for the counts
+##'     of sampled parameters
+##' @param dataToLambda index from the original data to the value of lambda
+##'     sampled 
 ##' @param etaM number of samples provided in the intialization
 ##' @param auxM how many auxiliary paramters to draw
 ##' @param alphaEta how much weight to place on new samples
+##' @param lambdaM how many auxiliary paramters to draw
+##' @param auxLambdaM how much weight to place on new samples
+##' @param alphaLambda how much weight to place on new samples
 ##' @param verbose whether to report intermediate actions
 ##' @param etaCols how large to make the workspace (too small a value
 ##'     will result in termination with an error)
+##' @param lambdaSize 
+##' @param dprior prior value for draws of eta
+##' @param ijvals \code{0L} by default, but for splitting and merging
+##'     a value of 2 is needed. Users should not usually change the
+##'     default.
+##' @param ... currently unused
 ##' @return list with elements \code{eta}, \code{etaN], \code{etaM},
 ##'     and \code{dataToEta} which are updates to the correspondingly
 ##'     named inputs for \code{gibbsDPP} and a list of two elements,
@@ -86,6 +101,8 @@ gibbsDPP <- function(
                   ijvals,
                   verbose,
                   dprior)
+
+  
   dim(res[["etaN"]]) <- dim(res[["dataToEta"]]) <- dim(res[["lambda"]]) <-
     dim(res[["lambdaN"]]) <- dim(res[["dataToLambda"]]) <- NULL
   res[["dataToEta"]] <-  res[["dataToEta"]] + 1L
@@ -101,14 +118,6 @@ gibbsDPP <- function(
 ##'     to do.
 ##' @param nthin how many iterations per saved value
 ##' @param nburn discard this many iterations before saving any values
-##' @param ctParms list of values for \code{nburn}, \code{ncore}, and
-##'     \code{method} to pass to \code{\link{ctSampler}}
-##' @param ijvals \code{0L} by default, but for splitting and merging
-##'     a value of 2 is needed. Users should not usually change the
-##'     default.
-##' @param ab if \code{NULL} treat \code{alphaEta} as a fixed
-##'     value. Otherwise the first two elemenbts are rthe shape and
-##'     rate parameters of Gamma prior for \code{alphaEta}.
 ##' @param dpriors The default value is \code{c(1.0,1.0)}. A smaller
 ##'     value for \code{dpriors[1]} causes draws from the prior for
 ##'     \code{eta} to be overdispersed. A larger value for
@@ -118,6 +127,16 @@ gibbsDPP <- function(
 ##'     posterior do not account for non-default values of
 ##'     \code{dpriors} and should be ignored when non-default values
 ##'     are used.
+##' 
+##' @param keep vector of elements of the result in each iteration to
+##'   retain or a function called with \code{pass}, the intermediate results, 
+##'
+##' @param ... currently unused
+##' @param abEta if \code{NULL} treat \code{alphaEta} as a fixed
+##'     value. Otherwise the first two elemenbts are rthe shape and
+##'     rate parameters of Gamma prior for \code{alphaEta}.
+##' @param abLambda akin to \code{abEta}
+##'
 ##' @importFrom stats rbeta rgamma dgamma runif
 ##' @export
 ##' @examples
@@ -135,7 +154,6 @@ gibbsScan <- function(wtab,
                       lambdaN = NULL,
                       dataToLambda = NULL, lambdaM = 0L,
                       alphaLambda = 1.0, auxLambdaM = 10L,
-		      ctParms = NULL,
 		      nkeep  =  1L, nthin = 1L, nburn = 0L,
 		      etaCols = 500L,
                       lambdaSize = 20L,
@@ -187,36 +205,49 @@ gibbsScan <- function(wtab,
     ## multinomial
     etaN <- etaN[1:etaM]
     eta <- eta[, 1:etaM, drop = FALSE]
-    uniq.indexes <- unique(cbind(di, dataToEta))
-    uniq.sums <- table(match(paste(di, dataToEta),
-                             paste(uniq.indexes[,1, drop = FALSE],
-                                   uniq.indexes[,2, drop = FALSE])))
-    marglik <-
-      marglogpost(eta[,1L + uniq.indexes[,2], drop = FALSE],
-                  om,tab[ 1L + uniq.indexes[,1], , drop = FALSE])
-    margliksum <- sum( marglik * uniq.sums)
-    ## Equations 6 and 10 Jain and Neal, 2007 yield 
-    logPriEta <- logPriorC(etaN,alphaEta)+etaM*lgamma(nrow(om))
     lambdaN <- lambdaN[1:lambdaM]
     lambda <- lambda[1:lambdaM]
+    iel <- data.table(ti=di,
+                      ei=as.vector(dataToEta),
+                      li=as.vector(dataToLambda)) + 1L ## 1 based indexes
+    iel.sums <- iel[, .N , .( ti, ei, li )] 
+    ie.sums <- iel.sums[, .( N=sum(N) ), by = .(ti, ei)]
+    marglik <-
+      marglogpost(eta[, ie.sums[,ei], drop = FALSE],
+                  om,tab[ ie.sums[, ti], , drop = FALSE])
+    margliksum <- sum(marglik * ie.sums[, N] )
+    ## Equations 6 and 10 Jain and Neal, 2007 yield 
+    logPriEta <- logPriorC(etaN,alphaEta)+etaM*lgamma(nrow(om))
     logPriLambda <- logPriorC( lambdaN, alphaLambda ) # + lambdaM*log(1.0)
     ## rho
-    uniq.indexes <- unique(cbind(di, dataToEta, dataToLambda))
-    uniq.sums <- table(match(paste(di, dataToEta, dataToLambda),
-                             paste(uniq.indexes[, 1, drop = FALSE],
-                                   uniq.indexes[, 2, drop = FALSE],
-                                   uniq.indexes[, 3, drop = FALSE])))
     r <- rowSums(tab)
     p <- rowSums(t(om)) %*% eta
     logprp <- 
         mapply(logprobp, #( r.elt, p.elt, lambda.elt)
-               r[1L+uniq.indexes[,1L]],
-               p[1L+uniq.indexes[,2L]],
-               lambda[1L+uniq.indexes[,3]])
-    logprho <- sum( uniq.sums * logprp )
+               r[ iel.sums[,ti]],
+               p[ iel.sums[,ei]],
+               lambda[ iel.sums[,li]])
+    logprho <- sum( iel.sums[, N] * logprp )
     c(multinom=margliksum, n.obs=logprho,eta=logPriEta, lambda=logPriLambda)
   }
 
+  keep.default <-
+    function(pass, log.posterior, i, nkeep, keep){
+      with(pass,
+           list(eta = eta[, 1:etaM],
+                etaN = etaN[ 1:etaM],
+                dataToEta = as.vector(dataToEta + 1L),
+                etaM = etaM,
+                lambda = lambda[1:lambdaM],
+                lambdaN = lambdaN[ 1:lambdaM],
+                dataToLambda = as.vector(dataToLambda + 1L),
+                lambdaM = lambdaM,
+                alphaEta = alphaEta,
+                alphaLambda = alphaLambda,
+                logpost = log.posterior
+                ))[ keep ]
+}
+  
   mc <- match.call()
 
   stopifnot(all(om>=0.0))
@@ -266,17 +297,18 @@ gibbsScan <- function(wtab,
     lambda  <- c(lambda,rep(0.0, padby))
     lambdaN <- c(lambdaN, rep(0.0, padby))
   }
+
+  if (is.function(keep)){
+    keep.fun <- keep
+    keep <- TRUE
+  } else {
+    keep.fun <- keep.default
+  }
   
   tab <- I( wtab[["tab"]] ) # force copy
   di <- wtab[["data.index"]] - 1L
   dataToEta <- dataToEta - 1L
   dataToLambda <- dataToLambda - 1L
-
-
-  
-  ctp <- list(nburn=10L, ncore = 1L, method="sampleX")
-  ctp[names(ctParms)] <- ctParms
-
 
   N <- sum(wtab[["n"]])
   log.dalphaEta <- 0.0
@@ -288,7 +320,9 @@ gibbsScan <- function(wtab,
                 lambdaN = lambdaN,
                 dataToLambda = dataToLambda, 
                 etaM = etaM,
-                lambdaM = lambdaM)
+                lambdaM = lambdaM,
+                alphaEta = alphaEta,
+                alphaLambda = alphaLambda)
 
   keepers <- list()
   isamp <- 0L
@@ -310,10 +344,10 @@ gibbsScan <- function(wtab,
                          pass1[["dataToLambda"]],
                          pass1[["etaM"]],
                          auxM = auxEtaM,
-                         alpha = alphaEta,
+                         alpha = pass1[["alphaEta"]],
                          pass1[["lambdaM"]],
                          auxLambdaM,
-                         alphaLambda,
+                         pass1[["alphaLambda"]],
                          ijvals = ijvals,
                          verbose = verbose,
                          dprior = dpriors[1])
@@ -328,14 +362,21 @@ gibbsScan <- function(wtab,
                     pass2[["lambdaN"]],
                     pass2[["lambdaM"]],
                     dprior, dpriorLambda, verbose)
-      
+
+      ## update alpha*
       if (!is.null(abEta)) {
-        alphaEta <- ralpha(alphaEta,abEta[1],abEta[2],pass2[["etaM"]], N)
-        log.dalphaEta <- dgamma(alphaEta, abEta[1], abEta[2], log = TRUE)
+        pass2[["alphaEta"]] <-
+          ralpha(pass1[["alphaEta"]],abEta[1],abEta[2],
+                 pass2[["etaM"]], N)
+        log.dalphaEta <- dgamma(pass2[["alphaEta"]], abEta[1],
+                                abEta[2], log = TRUE)
       }
       if (!is.null(abLambda)) {
-        alphaLambda <- ralpha(alphaLambda,abLambda[1],abLambda[2],pass2[["lambdaM"]], N)
-        log.dalphaLambda <- dgamma(alphaLambda, abLambda[1], abLambda[2], log = TRUE)
+        pass2[["alphaLambda"]] <-
+          ralpha(pass1[["alphaLambda"]], abLambda[1],abLambda[2],
+                 pass2[["lambdaM"]], N)
+        log.dalphaLambda <- dgamma(pass2[["alphaLambda"]],
+                                   abLambda[1], abLambda[2], log = TRUE)
       } else {
         log.dalphaLambda <- 0.0
         }
@@ -351,20 +392,7 @@ gibbsScan <- function(wtab,
              alpha.eta = log.dalphaEta, alpha.lambda = log.dalphaLambda))
     
     keepers[[ i ]] <-
-      with(pass2,
-           list(eta = eta[, 1:etaM],
-                etaN = etaN[ 1:etaM],
-                dataToEta = as.vector(dataToEta + 1L),
-                etaM = etaM,
-                lambda = lambda[1:lambdaM],
-                lambdaN = lambdaN[ 1:lambdaM],
-                dataToLambda = as.vector(dataToLambda + 1L),
-                lambdaM = lambdaM,
-                alphaEta = alphaEta,
-                alphaLambda = alphaLambda,
-                logpost = log.posterior
-                ))[ keep ]
-             
+      keep.fun(pass2,log.posterior,i,nkeep,keep)             
              
 
 
