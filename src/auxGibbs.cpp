@@ -1,8 +1,9 @@
 
 #include <RcppArmadillo.h>
+// [[Rcpp::depends(RcppArmadillo)]]
+
 using namespace Rcpp;
 using namespace arma;
-// [[Rcpp::depends(RcppArmadillo)]]
 
 /*
   auxGibbs.cpp
@@ -51,8 +52,8 @@ double logprobp( int r, double p, double lambda ){
 }
 
 // vectorized log probability of r given p and lambda
-// [[Rcpp::export]]
-inline rowvec logprob_p( int r, double p, rowvec lambda ){
+
+inline arma::rowvec logprob_p( int r, double p, arma::rowvec lambda ){
   rowvec result(lambda.size());
   for (int i = 0L; i<lambda.size(); i++) 
     result[i] = logprobp( r, p, lambda[i] );
@@ -60,9 +61,10 @@ inline rowvec logprob_p( int r, double p, rowvec lambda ){
 }    
 
 // log probability vector (sans multinomial coefficient)
-// [[Rcpp::export]]
-inline rowvec logprob(irowvec& tabrow, mat& om, mat& eta,
-		      rowvec& etaN, int etaLast, double lambda){
+
+inline arma::rowvec logprob(arma::irowvec& tabrow, arma::mat& om,
+			    arma::mat& eta, arma::rowvec& etaN,
+			    int etaLast, double lambda){
   rowvec logpr(etaLast);
   int J = eta.n_rows;
   int K = om.n_cols;
@@ -88,8 +90,7 @@ inline rowvec logprob(irowvec& tabrow, mat& om, mat& eta,
 
 
 // sample one index
-// [[Rcpp::export]]
-inline int newIndex(rowvec logpr){
+inline int newIndex(arma::rowvec logpr){
   double maxlogpr = max(logpr);
   double prcum = 0.0;
   for (int i =0;i<logpr.size(); i++){
