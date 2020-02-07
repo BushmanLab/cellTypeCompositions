@@ -1,8 +1,8 @@
 
 #include <RcppArmadillo.h>
+// [[Rcpp::depends(RcppArmadillo)]]
 using namespace Rcpp;
 using namespace arma;
-// [[Rcpp::depends(RcppArmadillo)]]
 
 inline void rmultnm(int n, double* prob, int k, int* rn){
     double prsum = 0.0;
