@@ -20,7 +20,7 @@
 ##' @param dataToLambda index from the original data to the value of lambda
 ##'     sampled 
 ##' @param etaM number of samples provided in the intialization
-##' @param auxM how many auxiliary paramters to draw
+##' @param auxEtaM how many auxiliary paramters to draw
 ##' @param alphaEta how much weight to place on new samples
 ##' @param lambdaM how many auxiliary paramters to draw
 ##' @param auxLambdaM how much weight to place on new samples
@@ -29,12 +29,14 @@
 ##' @param etaCols how large to make the workspace (too small a value
 ##'     will result in termination with an error)
 ##' @param lambdaSize 
-##' @param dprior prior value for draws of eta
+##' ##' @param dprior prior value for draws of eta
 ##' @param ijvals \code{0L} by default, but for splitting and merging
 ##'     a value of 2 is needed. Users should not usually change the
 ##'     default.
+##' @param dprior when calling \code{gibbsDPP} same as
+##'   \code{dpriors[1]} when calling \code{gibbsScan}
 ##' @param ... currently unused
-##' @return list with elements \code{eta}, \code{etaN], \code{etaM},
+##' @return list with elements \code{eta}, \code{etaN}, \code{etaM},
 ##'     and \code{dataToEta} which are updates to the correspondingly
 ##'     named inputs for \code{gibbsDPP} and a list of two elements,
 ##'     \code{last} and \code{launch}, given the last two such lists
@@ -51,7 +53,7 @@ gibbsDPP <- function(
                      lambdaN = NULL,
                      dataToLambda = NULL,
                      etaM = 0L,
-                     auxM = 5L,
+                     auxEtaM = 5L,
                      alphaEta = 100.0,
                      lambdaM = 0L,
                      auxLambdaM = 5L,
@@ -93,7 +95,7 @@ gibbsDPP <- function(
                   lambdaN,
                   dataToLambda,
                   etaM,
-                  auxM,
+                  auxEtaM,
                   alphaEta,
                   lambdaM,
                   auxLambdaM,
@@ -111,6 +113,11 @@ gibbsDPP <- function(
   class(res) <- "gibbsDPP"
   res
 }
+
+
+## code check issues addressed here:
+
+utils::globalVariables(".")
 
 
 ##' @rdname gibbsDPP
@@ -137,6 +144,7 @@ gibbsDPP <- function(
 ##'     rate parameters of Gamma prior for \code{alphaEta}.
 ##' @param abLambda akin to \code{abEta}
 ##'
+##' @importFrom data.table data.table .N 
 ##' @importFrom stats rbeta rgamma dgamma runif
 ##' @export
 ##' @examples
@@ -203,6 +211,7 @@ gibbsScan <- function(wtab,
                       lambda,lambdaN,dataToLambda,
                       lambdaM,alphaLambda){
     ## multinomial
+    ti <- ei <- li <- NULL # fix visibility checks 
     etaN <- etaN[1:etaM]
     eta <- eta[, 1:etaM, drop = FALSE]
     lambdaN <- lambdaN[1:lambdaM]
@@ -343,7 +352,7 @@ gibbsScan <- function(wtab,
                          pass1[["lambdaN"]],
                          pass1[["dataToLambda"]],
                          pass1[["etaM"]],
-                         auxM = auxEtaM,
+                         auxEtaM,
                          alpha = pass1[["alphaEta"]],
                          pass1[["lambdaM"]],
                          auxLambdaM,
@@ -409,7 +418,7 @@ gibbsScan <- function(wtab,
 ##' @param elt integer to select a sample to use as the starting point
 ##' @param ... parameters to revise using \code{update} 
 ##' @method update ctScan
-##' @S3method update ctScan
+##' @export
 update.ctScan <- function(object, elt = length(object), ...){
   mc <- match.call()
   nameOnly <- c("eta","etaN","dataToEta","etaM","alphaEta",
