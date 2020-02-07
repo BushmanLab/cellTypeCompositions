@@ -52,33 +52,6 @@ marglogpost <- function(ex.Sample,ex.OGS,obs){
   }
 
 
-##' Compute the logposterior from an object produced by \code{ctSampler}
-##'
-##' The details of the setup are inferred from
-##' \code{attr(obj,"call")}, then \code{\link{poislogpost}} is called
-##' on each sample to find its log posterior.  A typical use is to
-##' wrap a call to \code{ctSampler} with this function.  If the
-##' objects used to construct the object \code{obj} are not available,
-##' the function will fail.
-##' @title log posterior of Gibbs samples
-##' @param obj see \code{\link{ctSampler}}
-##' @param integrate logical, use marginal posterior over a locally
-##'     uniform prior (in which case the result is proportional to the
-##'     posterior).
-##' @return a list of vectors of log posteriors
-##' @author Charles Berry
-##' @export
-logposterior <- function(obj,integrate=FALSE){
-    objcall <- attr( obj, "call" )
-    wtab <- eval.parent(objcall$gMat)
-    if (!is.matrix(wtab))
-            dim(wtab) <- c(1, length(wtab))
-    uop <- eval.parent(objcall$uop)
-    pfun  <- if (integrate) marglogpost else poislogpost
-    lapply(1:nrow(wtab), function(i) pfun(obj[[i]],uop,wtab[i,]))
-}
-
-
 ##' Convert Expected Sample Counts to Expected Observation Counts
 ##'
 ##' 
@@ -99,7 +72,7 @@ exOGS <- function(pl) {
 ##' @param subset vector of rows of \code{oxOGS(pl)} represented in \code{ex.Sample}
 ##' @return vector of detection probabilities
 ##' @author Charles Berry
-##' @xport
+##' @export
 ##' @importFrom stats ppois
 pod <- function(ex.Sample,pl,subset=1:nrow(ex.Sample)){
     om <- exOGS(pl)
