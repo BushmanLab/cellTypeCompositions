@@ -13,6 +13,5 @@ Title: Cell Type Compositions Gibbs Sampler
 Author: Charles Berry                       
 Maintainer: Charles Berry <ccberry@ucsd.edu>    
 RoxygenNote: 7.0.2
-Depends: data.table
 Imports: Rcpp (>= 0.12.16), methods
 LinkingTo: Rcpp, RcppArmadillo
