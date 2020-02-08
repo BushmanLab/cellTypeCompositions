@@ -115,11 +115,6 @@ gibbsDPP <- function(
 }
 
 
-## code check issues addressed here:
-
-utils::globalVariables(".")
-
-
 ##' @rdname gibbsDPP
 ##' @param nkeep integer with value \code{nkeep>=1L}. How many scans
 ##'     to do.
@@ -144,7 +139,6 @@ utils::globalVariables(".")
 ##'     rate parameters of Gamma prior for \code{alphaEta}.
 ##' @param abLambda akin to \code{abEta}
 ##'
-##' @importFrom data.table data.table .N 
 ##' @importFrom stats rbeta rgamma dgamma runif
 ##' @export
 ##' @examples
@@ -211,20 +205,30 @@ gibbsScan <- function(wtab,
                       lambda,lambdaN,dataToLambda,
                       lambdaM,alphaLambda){
     ## multinomial
-    ti <- ei <- li <- NULL # fix visibility checks 
     etaN <- etaN[1:etaM]
     eta <- eta[, 1:etaM, drop = FALSE]
     lambdaN <- lambdaN[1:lambdaM]
     lambda <- lambda[1:lambdaM]
-    iel <- data.table(ti=di,
-                      ei=as.vector(dataToEta),
-                      li=as.vector(dataToLambda)) + 1L ## 1 based indexes
-    iel.sums <- iel[, .N , .( ti, ei, li )] 
-    ie.sums <- iel.sums[, .( N=sum(N) ), by = .(ti, ei)]
+    ## data by Eta by Lambda sums
+    iel <- di * (etaM * lambdaM) + dataToEta * lambdaM + dataToLambda
+    uiel <- unique(iel)
+    ui <- uiel %/% (etaM * lambdaM)
+    ue <- (uiel %/% lambdaM) %% etaM
+    ul <- (uiel %% lambdaM)
+    uind <- match(iel, uiel)
+    iel.sums <- tabulate(uind)
+    ## data by Eta sums
+    uie <- ui * etaM + ue
+    uuie <- unique(uie)
+    uuind <- match(uie, uuie)
+    uui <- uuie%/%etaM
+    uue <-   uuie %% etaM
+    ie.sums <- tapply(iel.sums, uuind, FUN=sum)
+
     marglik <-
-      marglogpost(eta[, ie.sums[,ei], drop = FALSE],
-                  om,tab[ ie.sums[, ti], , drop = FALSE])
-    margliksum <- sum(marglik * ie.sums[, N] )
+      marglogpost(eta[, 1L+uue, drop = FALSE],
+                  om,tab[ 1L+uui, , drop = FALSE])
+    margliksum <- sum(marglik * ie.sums )
     ## Equations 6 and 10 Jain and Neal, 2007 yield 
     logPriEta <- logPriorC(etaN,alphaEta)+etaM*lgamma(nrow(om))
     logPriLambda <- logPriorC( lambdaN, alphaLambda ) # + lambdaM*log(1.0)
@@ -233,10 +237,8 @@ gibbsScan <- function(wtab,
     p <- rowSums(t(om)) %*% eta
     logprp <- 
         mapply(logprobp, #( r.elt, p.elt, lambda.elt)
-               r[ iel.sums[,ti]],
-               p[ iel.sums[,ei]],
-               lambda[ iel.sums[,li]])
-    logprho <- sum( iel.sums[, N] * logprp )
+               r[ 1L+ui ], p[ 1L+ue ], lambda[ 1L+ul ] )
+    logprho <- sum( iel.sums * logprp )
     c(multinom=margliksum, n.obs=logprho,eta=logPriEta, lambda=logPriLambda)
   }
 
@@ -387,6 +389,7 @@ gibbsScan <- function(wtab,
         log.dalphaLambda <- dgamma(pass2[["alphaLambda"]],
                                    abLambda[1], abLambda[2], log = TRUE)
       } else {
+        pass2[["alphaLambda"]] <- alphaLambda
         log.dalphaLambda <- 0.0
         }
     }
