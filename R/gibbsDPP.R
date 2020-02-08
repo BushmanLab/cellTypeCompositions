@@ -432,6 +432,7 @@ update.ctScan <- function(object, elt = length(object), ...){
   newind <- match(newnames,names(objcall),0L)
   if (any(newnames == 0L)) stop( "couldn't match ", newnames[newind==0L])
   objcall[newnames] <- newparms
+  nameOnly <- setdiff(nameOnly, newnames)
   if (is.null(elt)) elt <- length(object)
   elt  <- object[[elt]]
   for ( i in nameOnly) objcall[[i]] <- as.name(i)
