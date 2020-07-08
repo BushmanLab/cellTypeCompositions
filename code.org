@@ -34,7 +34,7 @@
       {
 	if (lambda<DOUBLE_XMIN) lambda = DOUBLE_XMIN;
 	llk = (double) rsum * (log(lambda)+log(p)) -
-	  (double) n*(lambda*p + log1p(-lambda*p));
+	  (double) n*(lambda*p + log1p(-exp(-lambda*p)));
       }
     return llk;
   }
@@ -59,7 +59,7 @@
 
 #+end_src
 
-#+name: lobprobMulti
+#+name: logprobMulti
 #+begin_src cpp
 
   // log probability vector (sans multinomial coefficient)
@@ -106,6 +106,25 @@
 
 #+end_src
 
+#+name: newIndex
+#+begin_src cpp
+
+  // sample one index
+  int newIndex(arma::rowvec logpr){
+    double maxlogpr = max(logpr);
+    double prcum = 0.0;
+    for (int i =0;i<logpr.size(); i++){
+      prcum += exp(logpr(i)-maxlogpr);
+      logpr(i) = prcum;
+    }  
+    double ur = Rf_runif(0.0,prcum);
+    int index=0L;
+    for (; logpr[index] < ur && index<logpr.size(); index++);
+    return index;
+  }
+
+#+end_src
+
 #+name: rlamGivenR
 #+begin_src cpp
 
@@ -125,25 +144,6 @@
 
     return rg;
 
-  }
-
-#+end_src
-
-#+name: newIndex
-#+begin_src cpp
-
-  // sample one index
-  int newIndex(arma::rowvec logpr){
-    double maxlogpr = max(logpr);
-    double prcum = 0.0;
-    for (int i =0;i<logpr.size(); i++){
-      prcum += exp(logpr(i)-maxlogpr);
-      logpr(i) = prcum;
-    }  
-    double ur = Rf_runif(0.0,prcum);
-    int index=0L;
-    for (; logpr[index] < ur && index<logpr.size(); index++);
-    return index;
   }
 
 #+end_src
@@ -411,32 +411,38 @@
 
 ** rdirich
 
-#+begin_src R
+#+begin_src R :noweb yes
   Rcpp::sourceCpp(code='
   <<arma-headers>>
   <<rdirich>>
-  // [[Rcpp::export]
+  // [[Rcpp::export]]
   vec call_rdirich( int n, double dprior=1.0 ){
   return rdirich( n, dprior );}
   ')
 
   ## test here
+  set.seed(123)
+  cr <- call_rdirich(5L,1.0)
+  set.seed(123)
+  rr <- prop.table(rgamma(5,1))
+
+  if (all(cr==rr)) "PASS" else "FAIL"
 #+end_src
 
 
 ** logprob_Rplus
 
-#+begin_src R
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
   Rcpp::sourceCpp(code='
   <<arma-headers>>
-  <<logprobRplus>>
-  // [[Rcpp::export]
+  <<logprob_Rplus>>
+  // [[Rcpp::export]]
   double call_llkr( int rsum, int n, double p, double lambda ){
   return llkr( rsum, n, p,  lambda );}
-  // [[Rcpp::export]
+  // [[Rcpp::export]]
   arma::rowvec call_logprob_p( int r, double p, arma::rowvec lambda ){
     return logprob_p(  r,  p,  lambda );}
-  // [[Rcpp::export]
+  // [[Rcpp::export]]
   arma::rowvec call_logprob_l( int r, arma::rowvec p,  double lambda ){
   return logprob_l( r, p,  lambda );}
   ')
@@ -445,42 +451,83 @@
 
 #+end_src
 
+#+RESULTS:
+
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
+
+  R_llkr <- function(rsum, n, p, lambda){   
+    lambda <- pmax(.Machine$double.xmin, lambda)
+    res <-   rsum * (log(lambda)+log(p)) -
+      n*(lambda*p + log1p(-exp(-lambda*p)))
+    res[is.na(res)] <- 0.0
+    res
+  }
+
+  cllkr <- call_logprob_p(3L,0.8,c(1.2,NA))
+  rllkr <- R_llkr( 3L, 1L, 0.8, c(1.2,NA))
+
+  if (all(cllkr == rllkr )) "PASS" else "FAIL"
+
+  cllkr <- call_logprob_l(3L,c(0.8,0.9),1.2)
+  rllkr <- R_llkr( 3L, 1L, c(0.8,0.9), 1.2)
+
+  if (all(cllkr == rllkr )) "PASS" else "FAIL"
+
+#+end_src
+
+#+RESULTS:
+
 
 ** logprob_Multi
 
-#+begin_src R
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
   Rcpp::sourceCpp(code='
   <<arma-headers>>
+  <<logprob_Rplus>>
   <<logprobMulti>>
-  // [[Rcpp::export]
+  // [[Rcpp::export]]
   arma::rowvec call_logprob(arma::irowvec& tabrow, arma::mat& om,
   arma::mat& eta, arma::rowvec& etaN,
   int etaLast, double lambda){
   return logprob(tabrow, om, eta, etaN, etaLast, lambda);}
   ')
-
-  ## test here
 #+end_src
 
-
-** rlamGivenR
-
-#+begin_src R
-  Rcpp::sourceCpp(code='
-  <<arma-headers>>
-  <<rlamGivenR>>
-  // [[Rcpp::export]]
-  double call_rlamGivenR(double rho,double alpha,double beta,int r){
-  return rlamGivenR( rho, alpha, beta, r);}
-  ')
-
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
   ## test here
+
+  ## logprob(tabrow, om, eta, etaN, etaLast, lambda);}
+
+  tabrow <- c(1,2,3)
+  om<- (diag(3)+.05)/2
+  eta <- prop.table(cbind(1:3,1,3:1),2)
+  etaN <- 1:3
+  etaLast <- 3
+  lambda <- 2.0
+
+
+  clp <- call_logprob(tabrow, om, eta, etaN, etaLast, lambda)
+
+  Rlogprob <- function(tabrow, om, eta, etaN, etaLast, lambda){
+    tabsum <- sum(tabrow)
+    rho <- t( t(eta)%*%om )
+    logprc <- tabrow %*% log(prop.table(rho,2)) +
+      R_llkr(tabsum, 1L, colSums(rho), lambda) +
+      log( etaN )
+    logprc
+  }
+
+  Rlp <- Rlogprob(tabrow, om, eta, etaN, etaLast, lambda)
+
+  if (isTRUE(all.equal(clp,Rlp))) "PASS" else "FAIL"
 #+end_src
+
+#+RESULTS:
 
 
 ** newIndex
 
-#+begin_src R
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
   Rcpp::sourceCpp(code='
   <<arma-headers>>
   <<newIndex>>
@@ -492,33 +539,187 @@
   ## test here
 #+end_src
 
-** updateXX
+** rlamGivenR
 
-#+begin_src R
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
   Rcpp::sourceCpp(code='
   <<arma-headers>>
-  <<updateXX>>
+  <<newIndex>>
+  <<rlamGivenR>>
   // [[Rcpp::export]]
-    void updateXX( int newind,
-		   int i,
-		   arma::mat& XX,
-		   arma::rowvec& XXN,
-		   arma::ivec& diToXX,
-		   double XXN1,	// singleton flag
-		   int& XXM,
-		   int& decXXN,  
-		   int& incXXNnew,
-		   int& incXXNold,
-		   int auxXXM,
-		   int verbose)
-  {
-  call updateXX( int newind, i, XX, XXN, diToXX, XXN1,
-  XXM, decXXN, incXXNnew, incXXNold, auxXXM, verbose);}
-  // return nothing
+  double call_rlamGivenR(double rho,double alpha,double beta,int r){
+  return rlamGivenR( rho, alpha, beta, r);}
   ')
 
   ## test here
 #+end_src
+
+#+RESULTS:
+
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
+
+  rlambdaGivenR <- function(rho, alpha, beta, r){
+    KMAX <- 1000L
+    lkp <-  -(r+alpha)*log(beta+rho*(1.0+0:KMAX));
+    indx <- sample(0:KMAX,1,prob=exp(lkp))
+    rgamma(1L, alpha+r, rate=(beta+rho*(1+indx)))
+  }
+
+  set.seed(1234)
+  clam <- replicate(10, call_rlamGivenR(.8, 1.0,.01,1))
+  set.seed(1234)
+  rlam <- replicate(10,rlambdaGivenR(.8, 1.0,.01,1))
+
+  all.equal(rlam,clam)
+#+end_src
+
+
+** updateXX
+
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
+  Rcpp::sourceCpp(code='
+  <<arma-headers>>
+  <<updateXX>>
+  // [[Rcpp::export]]
+  List call_updateXX( int newind, int i, List xlist){
+    arma::mat XX = xlist["XX"];
+    arma::rowvec XXN = xlist["XXN"];
+    arma::ivec diToXX = xlist["diToXX"];
+    double XXN1 = xlist["XXN1"];
+    IntegerVector XXM = xlist["XXM"];
+    IntegerVector decXXN = xlist["decXXN"];
+    IntegerVector incXXNnew = xlist["incXXNnew"];
+    IntegerVector incXXNold = xlist["incXXNold"];
+    int auxXXM = xlist["auxXXM"];
+    int verbose = xlist["verbose"];
+    updateXX(newind, i, XX, XXN, diToXX, XXN1, XXM[0L],
+	     decXXN[0L], incXXNnew[0L], incXXNold[0L], auxXXM, verbose);
+    return List::create(
+			_["XX"] = XX,
+			_["XXN"] = XXN,
+			_["diToXX"] = diToXX,
+			_["XXN1"] = XXN1,
+			_["XXM"] = XXM,
+			_["decXXN"] = decXXN,
+			_["incXXNnew"] = incXXNnew,
+			_["incXXNold"] = incXXNold,
+			_["auxXXM"] = auxXXM,
+			_["verbose"] = verbose);
+  }
+  ')
+
+  ## test here
+#+end_src
+
+#+begin_src R
+  xlist <- 
+    list(
+      i = 0L,
+      XX = matrix(as.double(1:30),nrow=3),
+      XXN = rep(0.0, 10),
+      diToXX = rep(-1L,5),
+      XXN1 = 0L,
+      XXM = 0L,
+      decXXN = 0L,
+      incXXNnew = 0L,
+      incXXNold = 0L,
+      auxXXM = 5L,
+      verbose = 3L
+    )
+
+  vlist <- 
+    list(
+      XX = matrix(as.double(1:10),nrow=1),
+      XXN = rep(0.0, 10),
+      diToXX = rep(-1L,5),
+      XXN1 = 0L,
+      XXM = 0L,
+      decXXN = 0L,
+      incXXNnew = 0L,
+      incXXNold = 0L,
+      auxXXM = 5L,
+      verbose = 3L
+    )
+
+
+  ylist <- rlang::duplicate(xlist)
+
+  ## choose 1
+  zlist <- ylist
+
+  zlist <- vlist
+
+  ## cases  (4, 5, 4, 5, 4)  
+  newinds <- c(4L,0L,5L,1L,6L)
+
+
+  for (i in 0L:4L){
+    zlist <- callUpdateXX2(newinds[i+1],i,zlist)
+  }
+
+  ## update singleton existing case 2 
+
+  i  <- 4L
+  d2x <- zlist$diToXX[ i + 1L ]
+  zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
+  zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
+  zlist <- callUpdateXX2(0L,i,zlist)
+
+  ## add new case 4
+
+  i  <- 4L
+  d2x <- zlist$diToXX[ i + 1L ]
+  zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
+  zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
+  zlist <- callUpdateXX2(5L,i,zlist)
+
+  ## revise in place case 1
+
+  d2x <- zlist$diToXX[ i + 1L ]
+  zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
+  zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
+  zlist <- callUpdateXX2(2L,i,zlist)
+
+  ## remove early singleton case 2
+
+  ni <- 1L
+  for (i in 0:1){
+    d2x <- zlist$diToXX[ i + 1L ]
+    zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
+    zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
+    zlist <- callUpdateXX2(ni, i, zlist)
+    }
+
+
+  ## update singleton new case 3
+  i <- 4L
+  d2x <- zlist$diToXX[ i + 1L ]
+  zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
+  zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
+  zlist <- callUpdateXX2(2L,i,zlist)
+
+
+
+  ## test resizing
+
+  i <- 0L
+
+
+  for (j in 1:20){
+    ## use last
+    d2x <- zlist$diToXX[ i + 1L ]
+    zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
+    zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
+    zlist <- callUpdateXX2(length(zlist$XXN)-1L, i, zlist)  
+    ## discard last
+    d2x <- zlist$diToXX[ i + 1L ]
+    zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
+    zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
+    zlist <- callUpdateXX2(1L, i, zlist)
+  }
+
+#+end_src
+
 
 
 * tuneup
