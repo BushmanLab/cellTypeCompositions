@@ -1,0 +1,524 @@
+
+
+# source code for the package
+
+* headers
+
+#+name: arma-headers
+#+begin_src cpp
+
+  #include <RcppArmadillo.h>
+  using namespace Rcpp;
+  using namespace arma;
+  // [[Rcpp::depends(RcppArmadillo)]]
+
+
+#+end_src
+
+
+* utils
+
+#+name: logprob_Rplus
+#+begin_src cpp
+
+
+  // log probability of r given p and lambda
+
+  // log likelihood kernel sans constants in data r1!, r2!, ...
+  double llkr( int rsum, int n, double p, double lambda ){
+    double llk;
+    if (ISNA(lambda)) {
+      llk = 0.0;
+    }
+    else
+      {
+	if (lambda<DOUBLE_XMIN) lambda = DOUBLE_XMIN;
+	llk = (double) rsum * (log(lambda)+log(p)) -
+	  (double) n*(lambda*p + log1p(-lambda*p));
+      }
+    return llk;
+  }
+
+  // lambda vectorized log probability of r given p and lambda
+
+  arma::rowvec logprob_p( int r, double p, arma::rowvec lambda ){
+    rowvec result(lambda.size());
+    for (int i = 0L; i<lambda.size(); i++) 
+      result[i] = llkr( r, 1L, p, lambda[i] );
+    return result;
+  }    
+
+  // p vectorized log probability of r given p and lambda
+
+   arma::rowvec logprob_l( int r, arma::rowvec p,  double lambda ){
+    rowvec result(p.size());
+    for (int i = 0L; i<p.size(); i++) 
+      result[i] = llkr( r, 1L, p[i], lambda );
+    return result;
+  }    
+
+#+end_src
+
+#+name: lobprobMulti
+#+begin_src cpp
+
+  // log probability vector (sans multinomial coefficient)
+
+  inline arma::rowvec logprob(arma::irowvec& tabrow, arma::mat& om,
+			      arma::mat& eta, arma::rowvec& etaN,
+			      int etaLast, double lambda){
+    rowvec logpr(etaLast);
+    int J = eta.n_rows;
+    int K = om.n_cols;
+    for (int rc = 0; rc<etaLast; rc++){
+      double rhosum = 0.0;
+      int tabsum = 0L;
+      double logprc = 0.0;
+
+      for (int k = 0; k<K; k++){
+	tabsum+=tabrow(k);
+	double rhoelt = 0.0;
+	for (int j=0;j<J;j++) rhoelt+=om(j,k)*eta(j,rc);
+	logprc+= tabrow(k) * log(rhoelt);
+	rhosum+= rhoelt;
+      }
+      logprc-= (double) tabsum * log(rhosum);
+      logprc+= llkr( tabsum, 1L, rhosum, lambda );
+      logprc+= log( etaN(rc));
+      logpr(rc) = logprc;
+    }
+    return logpr;
+  }
+
+#+end_src
+
+#+name: rdirich
+#+begin_src cpp
+  // uniform dirichlet random numbers
+
+  inline vec rdirich( int n, double dprior=1.0 ){
+    vec rg( n );
+    for (int i = 0; i<n; i++) {
+      rg(i)=Rf_rgamma(dprior, 1.0);
+    }
+    return rg/sum(rg);
+  }
+
+#+end_src
+
+#+name: rlamGivenR
+#+begin_src cpp
+
+  #define KMAX 1000L
+
+  int newIndex(arma::rowvec logpr);
+
+  // [[Rcpp::export]]
+  double rlamGivenR(double rho,double alpha,double beta,int r){
+
+    arma::rowvec lkp(KMAX);
+    for (int k = 0; k<KMAX; k++) lkp[k] = -(r+alpha)*log(beta+rho*(1.0+k));
+
+    int indx = newIndex(lkp);
+
+    double rg = Rf_rgamma( alpha+r, 1.0/(beta+rho*(1+indx)));
+
+    return rg;
+
+  }
+
+#+end_src
+
+#+name: newIndex
+#+begin_src cpp
+
+  // sample one index
+  int newIndex(arma::rowvec logpr){
+    double maxlogpr = max(logpr);
+    double prcum = 0.0;
+    for (int i =0;i<logpr.size(); i++){
+      prcum += exp(logpr(i)-maxlogpr);
+      logpr(i) = prcum;
+    }  
+    double ur = Rf_runif(0.0,prcum);
+    int index=0L;
+    for (; logpr[index] < ur && index<logpr.size(); index++);
+    return index;
+  }
+
+#+end_src
+
+#+name: updateXX
+#+begin_src cpp
+  /*
+    update a matrix and associated N vector in place
+    Author: Charles C. Berry
+    Date: 12-04-2020
+
+  ,*/
+
+  #define MORESIZE 10L
+  #define MAXSIZE 100L
+
+
+  void updateXX( int newind,
+		 int i,
+		 arma::mat& XX,
+		 arma::rowvec& XXN,
+		 arma::ivec& diToXX,
+		 double XXN1,	// singleton flag
+		 int& XXM,
+		 int& decXXN,  
+		 int& incXXNnew,
+		 int& incXXNold,
+		 int auxXXM,
+		 int verbose)
+  {
+
+    int ndat = diToXX.n_elem;
+    int di2XX = diToXX[ i ];
+    int XXSize = XX.n_cols;
+
+    if (XXN1){
+      //singleton case
+      if (verbose>2L) Rprintf("singleton\n");
+      if (newind == di2XX)
+	{
+	  // retain di2XX
+	  XXN( di2XX ) = 1;
+	}
+      else if (newind < XXM)
+	{
+	  // use existing element in place of this one and move di2e
+	  XXN( newind )++;
+	  diToXX( i ) = newind;
+	  // shift left
+	  XXN.shed_col(di2XX);
+	  XX.shed_col(di2XX);
+	  if (verbose>2L)
+	    Rprintf("XXN.n_cols=%d XX.n_cols=%d\n", XXN.n_cols, XX.n_cols);
+	  XXM--;
+	  XXSize--;
+	  decXXN++;
+	  for (int idi=0; idi<ndat; idi++) 
+	    if (diToXX[ idi ] >= di2XX) diToXX[ idi ]--;
+	  if (verbose > 2L) Rprintf("diToXX=%d\n",diToXX[ i ]);
+	}
+      else
+	{
+	  // use new element
+	  // copy to di2XX
+	  XXN( di2XX ) = 1; incXXNnew++;
+	  XX.col( di2XX ) = XX.col( newind );
+	} 
+    }
+    else
+      // initial run or XXN[ di2XX ] >= 2
+      {
+	if (verbose>2L) Rprintf("initial run or N>=2\n");
+	if (newind >= XXM)
+	  {
+	    //use new element
+	    XXN( XXM ) =1;
+	    if (newind>XXM) XX.col(XXM) = XX.col(newind);
+	    if (verbose>2L) Rprintf("XX(0,XXM)=%f\n", XX(0,XXM));
+	    diToXX( i ) = XXM;
+	    XXM++;
+	    incXXNnew++;
+	    if (verbose>2L) Rprintf("XXM=%d\n", XXM);
+	  }
+	else
+	  {
+	    // use existing element
+	    XXN( newind )++;
+	    diToXX( i ) = newind;
+	    incXXNold++;
+	  }
+
+      }
+    // check size and pad as needed
+    if (XXM+auxXXM > XXSize){
+      if (verbose) {
+	Rprintf("XX has %d Elts ", XX.n_elem);
+	Rprintf("XXSize = %d XXM = %d auxXXM = %d\n",
+		XXSize, XXM, auxXXM);
+      }
+      int addSize = MORESIZE;
+      if (XXSize + addSize <= MAXSIZE){
+	XXSize += addSize;
+	XX.resize( XX.n_rows, XXSize ); 
+	XXN.resize( XXSize );
+      } else {
+	Rcpp::stop("Cannot resize XX");
+      }
+      if (verbose) Rprintf("XX has %d Elts\n", XX.n_elem);
+    }
+  }
+
+#+end_src
+
+* auxGibbs
+
+#+name: auxGibbs
+#+begin_src cpp
+  /*
+    auxGibbs.cpp
+
+    Auxiliary Gibbs Sampler for negative multinomial sampler of cell
+    type proportions.
+
+    Author: Charles C. Berry
+    Date: 24-01-2020
+    10-01-2020
+    22-04-2019
+    16-060-2019
+  ,*/
+
+  /* assume
+     imat tab = wtab["tab"];
+     ivec di = wtab["data.index"];
+     di = di - 1L;
+     di, dataTo[Eta|Lambda] are zero based
+  ,*/
+
+  // [[Rcpp::export]]
+  List auxGibbs(arma::imat& tab, arma::ivec& di, arma::mat& om, 
+		arma::mat eta,
+		arma::rowvec etaN,
+		arma::ivec diToEta,
+		arma::rowvec lambda,
+		arma::rowvec lambdaN,
+		arma::ivec diToLambda,
+		int etaM = 0L,
+		int auxM = 5L, double alpha = 100.0,
+		int lambdaM = 0L,
+		int auxLambdaM = 5L, double alphaLambda = 5.0,
+		int ijvals = 0L,
+		int verbose = 0L,
+		double dprior=1.0,
+		double lambdaShape=1.0,
+		double lambdaRate=0.01) {
+    // we get a list from R
+    // pull std::vector<double> from R list
+    // this is achieved through an implicit
+    // call to Rcpp::as
+  
+    int etaCols = eta.n_cols;
+    int lambdaSize = lambda.size();
+    int J = om.n_rows;
+    int ndat = di.size();
+    int decN = 0L;
+    int incNnew = 0L;
+    int incNold = 0L;
+
+    int decLambdaN = 0L;
+    int incLambdaNnew = 0L;
+    int incLambdaNold = 0L;
+
+    for (int i=ijvals;
+	 i<ndat && etaM+auxM <= etaCols && lambdaM+auxLambdaM <= lambdaSize;
+	 i++){
+  
+      if (verbose>1L) Rprintf("i = %d\n",i);
+    
+      int di2e = diToEta[ i ];
+      double etaN1; // singletons need one less 
+      if (di2e >= 0L && etaN( di2e ) == 1.0){
+	etaN1 = 1;
+	etaN( di2e ) = alpha/auxM;
+      }
+      else
+	{ etaN1 = 0; 
+	  if (di2e>=0L) etaN( di2e )--;
+	}
+    
+      int di2lam = diToLambda[ i ];
+      double lambdaN1; // singletons need one less 
+      if (di2lam >= 0L && lambdaN( di2lam ) == 1.0){
+	lambdaN1 = 1.0;
+	lambdaN( di2lam ) = alphaLambda/auxLambdaM;
+      }
+      else
+	{ lambdaN1 = 0; 
+	  if (di2lam>=0L) lambdaN( di2lam )--;
+	}
+    
+      // sample auxM from prior
+      for (int j = 0; j < auxM-etaN1; j++){
+	eta.col(j + etaM ) = rdirich(J, dprior);
+	etaN( j+etaM ) = alpha/auxM;
+      }
+    
+      // rho and logprob
+      // initially use lambdaVal = NA_REAL;
+      double lambdaVal = (di2lam < 0 ) ? NA_REAL : lambda( di2lam );
+    
+      irowvec tr = tab.row(di( i ));
+      int newind =
+	newIndex(logprob( tr, om, eta, etaN,
+			  etaM + auxM - (int) etaN1, lambdaVal));
+    
+      // update-eta
+    
+    
+      updateXX(  newind, i, eta, etaN, diToEta, etaN1, etaM,
+		 decN, incNnew, incNold, auxM, verbose);
+    
+      // update-lambda
+    
+      // sample lambdaM from posterior
+      double rhosum = (double) accu( trans(eta.col(newind))*om );
+      int tabsum = arma::sum( tr );
+      for (int j = 0; j < auxLambdaM-lambdaN1; j++){
+	lambda(j + lambdaM ) =
+	  rlamGivenR( rhosum, lambdaShape, lambdaRate, tabsum);
+	lambdaN( j+lambdaM ) = alphaLambda/auxLambdaM;
+      }
+    
+      newind = newIndex(logprob_p( tabsum, rhosum,
+				   lambda.head(lambdaM+auxLambdaM) ) +
+			log( lambdaN.head( lambdaM + auxLambdaM)));
+    
+      updateXX(  newind, i, lambda, lambdaN, diToLambda, lambdaN1, lambdaM,
+		 decLambdaN, incLambdaNnew, incLambdaNold, auxLambdaM, verbose);
+    
+    }
+    if (verbose)  {
+      Rprintf("delete Eta= %d add = %d use existing = %d ",
+	      decN, incNnew, incNold);
+      Rprintf("delete Lambda= %d add = %d use existing = %d\n",
+	      decLambdaN, incLambdaNnew, incLambdaNold);
+    }
+    
+    // return an R list; this is achieved
+    // through an implicit call to Rcpp::wrap
+    return List::create(_["eta"] = eta,
+			_["etaN"] = etaN,
+			_["dataToEta"] = diToEta,
+			_["etaM"] = etaM,
+			_["lambda"] = lambda,
+			_["lambdaN"] = lambdaN,
+			_["dataToLambda"] = diToLambda,
+			_["lambdaM"] = lambdaM
+			);
+  }
+
+
+#+end_src
+
+
+* tests
+
+** rdirich
+
+#+begin_src R
+  Rcpp::sourceCpp(code='
+  <<arma-headers>>
+  <<rdirich>>
+  // [[Rcpp::export]
+  vec call_rdirich( int n, double dprior=1.0 ){
+  return rdirich( n, dprior );}
+  ')
+
+  ## test here
+#+end_src
+
+
+** logprob_Rplus
+
+#+begin_src R
+  Rcpp::sourceCpp(code='
+  <<arma-headers>>
+  <<logprobRplus>>
+  // [[Rcpp::export]
+  double call_llkr( int rsum, int n, double p, double lambda ){
+  return llkr( rsum, n, p,  lambda );}
+  // [[Rcpp::export]
+  arma::rowvec call_logprob_p( int r, double p, arma::rowvec lambda ){
+    return logprob_p(  r,  p,  lambda );}
+  // [[Rcpp::export]
+  arma::rowvec call_logprob_l( int r, arma::rowvec p,  double lambda ){
+  return logprob_l( r, p,  lambda );}
+  ')
+
+  ## test here
+
+#+end_src
+
+
+** logprob_Multi
+
+#+begin_src R
+  Rcpp::sourceCpp(code='
+  <<arma-headers>>
+  <<logprobMulti>>
+  // [[Rcpp::export]
+  arma::rowvec call_logprob(arma::irowvec& tabrow, arma::mat& om,
+  arma::mat& eta, arma::rowvec& etaN,
+  int etaLast, double lambda){
+  return logprob(tabrow, om, eta, etaN, etaLast, lambda);}
+  ')
+
+  ## test here
+#+end_src
+
+
+** rlamGivenR
+
+#+begin_src R
+  Rcpp::sourceCpp(code='
+  <<arma-headers>>
+  <<rlamGivenR>>
+  // [[Rcpp::export]]
+  double call_rlamGivenR(double rho,double alpha,double beta,int r){
+  return rlamGivenR( rho, alpha, beta, r);}
+  ')
+
+  ## test here
+#+end_src
+
+
+** newIndex
+
+#+begin_src R
+  Rcpp::sourceCpp(code='
+  <<arma-headers>>
+  <<newIndex>>
+  // [[Rcpp::export]]
+  int call_newIndex(arma::rowvec logpr){
+    return newIndex(arma::rowvec logpr);}
+  ')
+
+  ## test here
+#+end_src
+
+** updateXX
+
+#+begin_src R
+  Rcpp::sourceCpp(code='
+  <<arma-headers>>
+  <<updateXX>>
+  // [[Rcpp::export]]
+    void updateXX( int newind,
+		   int i,
+		   arma::mat& XX,
+		   arma::rowvec& XXN,
+		   arma::ivec& diToXX,
+		   double XXN1,	// singleton flag
+		   int& XXM,
+		   int& decXXN,  
+		   int& incXXNnew,
+		   int& incXXNold,
+		   int auxXXM,
+		   int verbose)
+  {
+  call updateXX( int newind, i, XX, XXN, diToXX, XXN1,
+  XXM, decXXN, incXXNnew, incXXNold, auxXXM, verbose);}
+  // return nothing
+  ')
+
+  ## test here
+#+end_src
+
+
+* tuneup
