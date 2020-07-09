@@ -29,12 +29,14 @@
 ##' @param etaCols how large to make the workspace (too small a value
 ##'     will result in termination with an error)
 ##' @param lambdaSize 
-##' ##' @param dprior prior value for draws of eta
+##'dprior prior value for draws of eta
+##' @param dprior when calling \code{gibbsDPP} same as
+##'   \code{dpriors[1]} when calling \code{gibbsScan}
+##' @param lambdaShape base distribution prior shape 
+##' @param lambdaRate base distribution prior rate
 ##' @param ijvals \code{0L} by default, but for splitting and merging
 ##'     a value of 2 is needed. Users should not usually change the
 ##'     default.
-##' @param dprior when calling \code{gibbsDPP} same as
-##'   \code{dpriors[1]} when calling \code{gibbsScan}
 ##' @param ... currently unused
 ##' @return list with elements \code{eta}, \code{etaN}, \code{etaM},
 ##'     and \code{dataToEta} which are updates to the correspondingly
@@ -62,6 +64,8 @@ gibbsDPP <- function(
                      etaCols = 500L,
                      lambdaSize = 10L,
                      dprior=1.0,
+                     lambdaShape=1.0,
+                     lambdaRate=0.01,
                      ijvals=0L,
                      ...
                      )
@@ -102,7 +106,9 @@ gibbsDPP <- function(
                   alphaLambda,
                   ijvals,
                   verbose,
-                  dprior)
+                  dprior,
+                  lambdaShape,
+                  lambdaRate)
 
   
   dim(res[["etaN"]]) <- dim(res[["dataToEta"]]) <- dim(res[["lambda"]]) <-
@@ -281,12 +287,13 @@ gibbsScan <- function(wtab,
   stopifnot(all(abEta>0), length(abEta)==0 || length(abEta==2))
   stopifnot(all(abLambda>0), length(abLambda)==0 || length(abLambda==2))
   if (ijvals!=0){
-    if (etaM!=ijvals) stop("ijvals != etaM (0L, by default) is not permitted")
-    if (ncol(eta)!=ijvals) warning("ncol(eta) != ijvals is usually an error")
+    if (etaM!=ijvals) stop("ijvals != etaM or 0L is not permitted")
+    if (ncol(eta)!=ijvals)
+        warning("ijvals !=0 && ncol(eta) != ijvals is usually an error")
     if (is.null(dataToEta) || any(dataToEta[1:ijvals]<1) )
       stop("dataToEta[1:ijvals] must be given as positive integers")
   } else {
-    if (auxLambdaM == 0L) warning("auxLambdaM == 0 & ijvals == 0 is usually a mistake")
+    if (auxEtaM == 0L) warning("auxEtaM == 0 & ijvals == 0 is usually a mistake")
   }
 
   if (auxEtaM != 0L && etaM + auxEtaM > ncol(eta)){
