@@ -161,7 +161,7 @@
   #define MAXSIZE 100L
 
 
-  void updateXX( int newind,
+  int updateXX( int newind,
 		 int i,
 		 arma::mat& XX,
 		 arma::rowvec& XXN,
@@ -253,6 +253,7 @@
       }
       if (verbose) Rprintf("XX has %d Elts\n", XX.n_elem);
     }
+    return XXSize;
   }
 
 #+end_src
@@ -361,7 +362,7 @@
       // update-eta
     
     
-      updateXX(  newind, i, eta, etaN, diToEta, etaN1, etaM,
+      etaCols = updateXX(  newind, i, eta, etaN, diToEta, etaN1, etaM,
 		 decN, incNnew, incNold, auxM, verbose);
     
       // update-lambda
@@ -379,7 +380,7 @@
 				   lambda.head(lambdaM+auxLambdaM) ) +
 			log( lambdaN.head( lambdaM + auxLambdaM)));
     
-      updateXX(  newind, i, lambda, lambdaN, diToLambda, lambdaN1, lambdaM,
+      lambdaSize = updateXX(  newind, i, lambda, lambdaN, diToLambda, lambdaN1, lambdaM,
 		 decLambdaN, incLambdaNnew, incLambdaNold, auxLambdaM, verbose);
     
     }
@@ -408,6 +409,14 @@
 
 
 * tests
+
+Many src blocks can use Rcpp::sourceCpp(code="...").
+
+However, strings with embedded backslash escapes will cause issues and
+sometimes errors.
+
+To obviate those, tangling to a temp file and using
+Rcpp::sourceCpp("tempfilename.cpp") should work.
 
 ** rdirich
 
@@ -576,8 +585,8 @@
 
 ** updateXX
 
-#+begin_src R :noweb yes :session *R:cellTypeCompositions*
-  Rcpp::sourceCpp(code='
+
+#+begin_src cpp :main no :noweb yes :tangle nobuild/test-updateXX.cpp
   <<arma-headers>>
   <<updateXX>>
   // [[Rcpp::export]]
@@ -606,12 +615,19 @@
 			_["auxXXM"] = auxXXM,
 			_["verbose"] = verbose);
   }
-  ')
 
-  ## test here
 #+end_src
 
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
+Rcpp::sourceCpp("nobuild/test-updateXX.cpp")
+#+end_src
+
+#+RESULTS:
+
 #+begin_src R
+  ## TODO: this exercises updateXX, but requires manual inspection of
+  ## results to verify correctness
+
   xlist <- 
     list(
       i = 0L,
@@ -654,7 +670,7 @@
 
 
   for (i in 0L:4L){
-    zlist <- callUpdateXX2(newinds[i+1],i,zlist)
+    zlist <- call_updateXX(newinds[i+1],i,zlist)
   }
 
   ## update singleton existing case 2 
@@ -663,7 +679,7 @@
   d2x <- zlist$diToXX[ i + 1L ]
   zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
   zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
-  zlist <- callUpdateXX2(0L,i,zlist)
+  zlist <- call_updateXX(0L,i,zlist)
 
   ## add new case 4
 
@@ -671,14 +687,14 @@
   d2x <- zlist$diToXX[ i + 1L ]
   zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
   zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
-  zlist <- callUpdateXX2(5L,i,zlist)
+  zlist <- call_updateXX(5L,i,zlist)
 
   ## revise in place case 1
 
   d2x <- zlist$diToXX[ i + 1L ]
   zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
   zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
-  zlist <- callUpdateXX2(2L,i,zlist)
+  zlist <- call_updateXX(2L,i,zlist)
 
   ## remove early singleton case 2
 
@@ -687,7 +703,7 @@
     d2x <- zlist$diToXX[ i + 1L ]
     zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
     zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
-    zlist <- callUpdateXX2(ni, i, zlist)
+    zlist <- call_updateXX(ni, i, zlist)
     }
 
 
@@ -696,7 +712,7 @@
   d2x <- zlist$diToXX[ i + 1L ]
   zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
   zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
-  zlist <- callUpdateXX2(2L,i,zlist)
+  zlist <- call_updateXX(2L,i,zlist)
 
 
 
@@ -710,15 +726,57 @@
     d2x <- zlist$diToXX[ i + 1L ]
     zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
     zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
-    zlist <- callUpdateXX2(length(zlist$XXN)-1L, i, zlist)  
+    zlist <- call_updateXX(length(zlist$XXN)-1L, i, zlist)  
     ## discard last
     d2x <- zlist$diToXX[ i + 1L ]
     zlist$XXN[ d2x+1L ] <-   zlist$XXN[ d2x+1L ] - 1.0
     zlist$XXN1  <- if (zlist$XXN[ d2x + 1L] == 0L) 1L else 0L
-    zlist <- callUpdateXX2(1L, i, zlist)
+    zlist <- call_updateXX(1L, i, zlist)
   }
 
 #+end_src
+
+
+
+** auxGibbs
+
+#+begin_src cpp :noweb yes :main no :tangle nobuild/test-auxGibbs.cpp
+  <<arma-headers>>
+  <<rdirich>>
+  <<logprob_Rplus>>
+  <<logprobMulti>>
+  <<newIndex>>
+  <<rlamGivenR>>
+  <<updateXX>>
+  <<auxGibbs>>
+#+end_src
+
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
+Rcpp::sourceCpp("nobuild/test-auxGibbs.cpp")
+#+end_src
+
+#+RESULTS:
+
+The results here seems plausible. But keep an eye on the lambda
+values for small r.
+
+
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
+  source("R/gibbsDPP.R")
+  load("~/projects/bushman/WAS/derep-11-17/wttabs.etc.RData")
+  wtab <- wttabs[[11]]
+  om <- with(param.list[[11]],diag(upsilon)%*%omega%*%diag(psi))
+
+  tmp <- gibbsDPP(wtab,om,verbose=1L)
+  str(tmp)
+
+  tmp <- gibbsDPP(wtab,om,alphaEta=1.0,alphaLambda=0.5, verbose=1L)
+
+  with(tmp,cbind(lambda,lambdaN)[order(lambda),])
+#+end_src
+
+#+RESULTS:
+
 
 
 
