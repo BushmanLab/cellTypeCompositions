@@ -267,6 +267,14 @@
     for (int i=0; i<k; i++) prob[i] /= prsum;
     Rf_rmultinom(n, prob,k,rn);
   }
+#+end_src
+
+#+name: rN0GivenN1
+#+begin_src cpp :noweb yes
+  // [[Rcpp::export]]
+  int rN0GivenN1( int N1, double lambda, double rhoplus ){
+    return  Rf_rnbinom( (double) N1, -expm1(-lambda * rhoplus ) );
+  }
 
 #+end_src
 
@@ -764,7 +772,7 @@ Rcpp::sourceCpp("nobuild/test-updateXX.cpp")
 #+end_src
 
 #+begin_src R :noweb yes :session *R:cellTypeCompositions*
-Rcpp::sourceCpp("nobuild/test-auxGibbs.cpp")
+  Rcpp::sourceCpp("nobuild/test-auxGibbs.cpp")
 #+end_src
 
 #+RESULTS:
@@ -799,8 +807,9 @@ values for small r.
   <<arma-headers>>
   <<rmultnm>>
   // [[Rcpp::export]]
-  ivec call_rmultnm(int n, NumericVector prob, int k){
-  ivec rn(n);
+  ivec call_rmultnm(int n, NumericVector prob){
+  int k = LENGTH(prob);
+  ivec rn(k);
   rmultnm(n, REAL(prob), k, &rn[0]);
     return rn;}
     ')
@@ -811,21 +820,88 @@ values for small r.
 #+begin_src R :noweb yes
   ## test here
   set.seed(123)
-  cr <- replicate(1000,call_rmultnm(5L,1:5,5))
+  cr <- replicate(1000,call_rmultnm(5L,1:5))
   set.seed(123)
   rr <- replicate(1000, rmultinom(1,5,1:5))
   if (all(cr==rr)) "PASS" else "FAIL"
 #+end_src
+
+** rN0GivenN1
+
+
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
+  Rcpp::sourceCpp(
+	  code ='
+  <<arma-headers>>
+  <<rN0GivenN1>>
+  ')
+
+  rho <- 0.8
+  lambda <- 1.0
+  prob <- -expm1(-rho*lambda)
+
+  set.seed(123)
+  if (isTRUE(all.equal(
+    3 * (1-prob)/prob,
+    mean(replicate(10000,rN0GivenN1(3,lambda,rho))),
+    tol=0.01))) "PASS" else "FAIL"
+
+#+end_src
+
+#+RESULTS:
+: PASS
 
 ** sampleParms
 
 #+begin_src cpp :noweb yes :tangle nobuild/sampleParms.cpp
     <<arma-headers>>
   <<rmultnm>>
-  
+
 #+end_src
 
 #+begin_src R :noweb yes :session *R:cellTypeCompositions*
+
+#+end_src
+
+#+begin_src R
+  etaLambdaTab <- with(tmp,table(dataToEta,dataToLambda))
+
+
+  lambdaN0 <- rep(0.0,nrow(etaLambdaTab))
+
+  for (eta_indx in 1:nrow(etaLambdaTab)){
+    eta_elt <- with(tmp,eta[,eta_indx])  
+    rhoplus_elt <- sum(eta_elt%*%om)
+    for (j in 1:ncol(etaLambdaTab)){
+      if (etaLambdaTab[eta_indx,j] != 0L)
+      lambdaN0[eta_indx] <- lambdaN0[eta_indx] + tmp$lambda[j]*
+	rN0GivenN1(etaLambdaTab[eta_indx,j],tmp$lambda[j], rhoplus_elt)
+    }
+  }
+
+
+  lambdaRhoComp <- t((1.0-rowSums(om)) * with(tmp,eta[,1:etaM])) * lambdaN0
+
+
+
+  etaPostTab <- xtabs(with(wtab,tab[data.index,])~ tmp$dataToEta)
+
+
+  etaVisTab <- sapply( 1:tmp$etaM, function(eta_indx){ 
+    eta_elt <- with(tmp,eta[,eta_indx])  
+    rho_elt <- om*eta_elt
+    rowSums(sapply(1:5, function(k)
+      call_rmultnm(etaPostTab[eta_indx,k],rho_elt[,k])))
+  })
+
+  etaInvisTab <- array(rpois(lambdaRhoComp,lambdaRhoComp),dim(lambdaRhoComp))
+
+  list(t(etaVisTab),round(lambdaRhoComp))
+
+  etaTab <- etaVisTab + etaInvisTab
+
+  etaUpdate <- prop.table(array(rgamma(etaTab,etaTab+1.0),dim(etaTab)),2)
+
 
 #+end_src
 
