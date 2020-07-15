@@ -866,7 +866,6 @@ values for small r.
 #+begin_src R
   etaLambdaTab <- with(tmp,table(dataToEta,dataToLambda))
 
-
   lambdaN0 <- rep(0.0,nrow(etaLambdaTab))
 
   for (eta_indx in 1:nrow(etaLambdaTab)){
@@ -896,13 +895,43 @@ values for small r.
 
   etaInvisTab <- array(rpois(lambdaRhoComp,lambdaRhoComp),dim(lambdaRhoComp))
 
-  list(t(etaVisTab),round(lambdaRhoComp))
+  ## list(t(etaVisTab),round(lambdaRhoComp))
 
-  etaTab <- etaVisTab + etaInvisTab
+  etaTab <- etaVisTab + t( etaInvisTab )
 
   etaUpdate <- prop.table(array(rgamma(etaTab,etaTab+1.0),dim(etaTab)),2)
 
+  ## round(cbind(with(tmp,t(eta[,1:etaM])),t(etaUpdate)),3)
 
+  ## round(with(tmp,t(eta[,1:etaM]))-t(etaUpdate),3)
+
+  tmp$eta[,1:tmp$etaM] <- etaUpdate
+
+
+  ## update lambda
+
+  lambdaN1 <- lambdaN0 <- array(0.0,dim(etaLambdaTab))
+
+  for (eta_indx in 1:nrow(etaLambdaTab)){
+    eta_elt <- with(tmp,eta[,eta_indx])  
+    rhoplus_elt <- sum(eta_elt%*%om)
+    for (j in 1:ncol(etaLambdaTab)){
+      if (etaLambdaTab[eta_indx,j] != 0L)
+      lambdaN0[eta_indx,j] <- 
+	rhoplus_elt * rN0GivenN1(etaLambdaTab[eta_indx,j],tmp$lambda[j], rhoplus_elt)
+      lambdaN1[eta_indx,j] <- rhoplus_elt * etaLambdaTab[eta_indx,j]    
+    }
+  }
+
+  lambdaPostTab <- xtabs(rowSums(with(wtab,tab[data.index,]))~ tmp$dataToLambda)
+
+  lambdaUpdate <- with(tmp,
+		       rgamma(lambdaPostTab, 1.0+lambdaPostTab,
+			 rate = 0.01 + colSums(lambdaN1 + lambdaN0)))
+
+  ## round(cbind(lambdaUpdate,with(tmp,lambda[1:lambdaM]),lambdaPostTab,colSums(lambdaN1),colSums(lambdaN0)),3)
+
+  tmp$lambda[1:tmp$lambdaM] <- lambdaUpdate
 #+end_src
 
 * tuneup
