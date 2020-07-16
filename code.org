@@ -870,11 +870,12 @@ values for small r.
   lambdaPostTab <- xtabs(rowSums(with(wtab,tab[data.index,]))~ tmp$dataToLambda)
   etaPostTab <- xtabs(with(wtab,tab[data.index,])~ tmp$dataToEta)
 
+
+  llk <- NULL
   ##
   for (irep in 1:100){
-
+    llk <- c(llk,sum(log(prop.table(with(tmp,t(eta[,1:etaM]))%*%om,1))*etaPostTab))
     lambdaN0 <- rep(0.0,nrow(etaLambdaTab))
-
     for (eta_indx in 1:nrow(etaLambdaTab)){
       eta_elt <- with(tmp,eta[,eta_indx])  
       rhoplus_elt <- sum(eta_elt%*%om)
@@ -922,9 +923,16 @@ values for small r.
 
     tmp$lambda[1:tmp$lambdaM] <- lambdaUpdate
 
-    print(sum(log(prop.table(with(tmp,t(eta[,1:etaM]))%*%om,1))*etaPostTab))
   }
+  llk <- c(llk,sum(log(prop.table(with(tmp,t(eta[,1:etaM]))%*%om,1))*etaPostTab))
 
+  plot(llk)
+
+  plot(llk[-(1:20)])
+
+  diff(colMeans(matrix(llk[-1],nc=10)))
+
+  acf(llk[-(1:40)])
   ### checks
 
 
