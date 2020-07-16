@@ -864,74 +864,89 @@ values for small r.
 #+end_src
 
 #+begin_src R
+  tmp0 <- tmp
+
   etaLambdaTab <- with(tmp,table(dataToEta,dataToLambda))
-
-  lambdaN0 <- rep(0.0,nrow(etaLambdaTab))
-
-  for (eta_indx in 1:nrow(etaLambdaTab)){
-    eta_elt <- with(tmp,eta[,eta_indx])  
-    rhoplus_elt <- sum(eta_elt%*%om)
-    for (j in 1:ncol(etaLambdaTab)){
-      if (etaLambdaTab[eta_indx,j] != 0L)
-      lambdaN0[eta_indx] <- lambdaN0[eta_indx] + tmp$lambda[j]*
-	rN0GivenN1(etaLambdaTab[eta_indx,j],tmp$lambda[j], rhoplus_elt)
-    }
-  }
-
-
-  lambdaRhoComp <- t((1.0-rowSums(om)) * with(tmp,eta[,1:etaM])) * lambdaN0
-
-
-
+  lambdaPostTab <- xtabs(rowSums(with(wtab,tab[data.index,]))~ tmp$dataToLambda)
   etaPostTab <- xtabs(with(wtab,tab[data.index,])~ tmp$dataToEta)
 
+  ##
+  for (irep in 1:100){
 
-  etaVisTab <- sapply( 1:tmp$etaM, function(eta_indx){ 
-    eta_elt <- with(tmp,eta[,eta_indx])  
-    rho_elt <- om*eta_elt
-    rowSums(sapply(1:5, function(k)
-      call_rmultnm(etaPostTab[eta_indx,k],rho_elt[,k])))
-  })
+    lambdaN0 <- rep(0.0,nrow(etaLambdaTab))
 
-  etaInvisTab <- array(rpois(lambdaRhoComp,lambdaRhoComp),dim(lambdaRhoComp))
-
-  ## list(t(etaVisTab),round(lambdaRhoComp))
-
-  etaTab <- etaVisTab + t( etaInvisTab )
-
-  etaUpdate <- prop.table(array(rgamma(etaTab,etaTab+1.0),dim(etaTab)),2)
-
-  ## round(cbind(with(tmp,t(eta[,1:etaM])),t(etaUpdate)),3)
-
-  ## round(with(tmp,t(eta[,1:etaM]))-t(etaUpdate),3)
-
-  tmp$eta[,1:tmp$etaM] <- etaUpdate
-
-
-  ## update lambda
-
-  lambdaN1 <- lambdaN0 <- array(0.0,dim(etaLambdaTab))
-
-  for (eta_indx in 1:nrow(etaLambdaTab)){
-    eta_elt <- with(tmp,eta[,eta_indx])  
-    rhoplus_elt <- sum(eta_elt%*%om)
-    for (j in 1:ncol(etaLambdaTab)){
-      if (etaLambdaTab[eta_indx,j] != 0L)
-      lambdaN0[eta_indx,j] <- 
-	rhoplus_elt * rN0GivenN1(etaLambdaTab[eta_indx,j],tmp$lambda[j], rhoplus_elt)
-      lambdaN1[eta_indx,j] <- rhoplus_elt * etaLambdaTab[eta_indx,j]    
+    for (eta_indx in 1:nrow(etaLambdaTab)){
+      eta_elt <- with(tmp,eta[,eta_indx])  
+      rhoplus_elt <- sum(eta_elt%*%om)
+      for (j in 1:ncol(etaLambdaTab)){
+	if (etaLambdaTab[eta_indx,j] != 0L)
+	  lambdaN0[eta_indx] <- lambdaN0[eta_indx] + tmp$lambda[j]*
+	    (rN0GivenN1(etaLambdaTab[eta_indx,j],tmp$lambda[j], rhoplus_elt) +
+	     etaLambdaTab[eta_indx,j])
+      }
     }
+
+    lambdaRhoComp <-
+      t((1.0-rowSums(om)) * with(tmp,eta[,1:etaM])) * lambdaN0
+
+    etaVisTab <- sapply( 1:tmp$etaM, function(eta_indx){ 
+      eta_elt <- with(tmp,eta[,eta_indx])  
+      rho_elt <- om*eta_elt
+      rowSums(sapply(1:5, function(k)
+	call_rmultnm(etaPostTab[eta_indx,k],rho_elt[,k])))
+    })
+
+    etaInvisTab <- array(rpois(lambdaRhoComp,lambdaRhoComp),dim(lambdaRhoComp))
+    etaTab <- etaVisTab + t( etaInvisTab )
+    etaUpdate <- prop.table(array(rgamma(etaTab,etaTab+1.0),dim(etaTab)),2)
+    tmp$eta[,1:tmp$etaM] <- etaUpdate
+
+    ## update lambda
+
+    lambdaN1 <- lambdaN0 <- array(0.0,dim(etaLambdaTab))
+
+    for (eta_indx in 1:nrow(etaLambdaTab)){
+      eta_elt <- with(tmp,eta[,eta_indx])  
+      rhoplus_elt <- sum(eta_elt%*%om)
+      for (j in 1:ncol(etaLambdaTab)){
+	if (etaLambdaTab[eta_indx,j] != 0L)
+	  lambdaN0[eta_indx,j] <- rhoplus_elt *
+	    rN0GivenN1(etaLambdaTab[eta_indx,j],tmp$lambda[j], rhoplus_elt)
+	lambdaN1[eta_indx,j] <- rhoplus_elt * etaLambdaTab[eta_indx,j]    
+      }
+    }
+
+    lambdaUpdate <- with(tmp,
+			 rgamma(lambdaPostTab, 1.0+lambdaPostTab,
+				rate = 0.01 + colSums(lambdaN1 + lambdaN0)))
+
+    tmp$lambda[1:tmp$lambdaM] <- lambdaUpdate
+
+    print(sum(log(prop.table(with(tmp,t(eta[,1:etaM]))%*%om,1))*etaPostTab))
   }
 
-  lambdaPostTab <- xtabs(rowSums(with(wtab,tab[data.index,]))~ tmp$dataToLambda)
+  ### checks
 
-  lambdaUpdate <- with(tmp,
-		       rgamma(lambdaPostTab, 1.0+lambdaPostTab,
-			 rate = 0.01 + colSums(lambdaN1 + lambdaN0)))
+
+
+  list(
+    round(cbind(prop.table(with(tmp,t(eta[,1:etaM]))%*%om,1),
+		prop.table(with(tmp0,t(eta[,1:etaM]))%*%om,1)), 3),
+    round(prop.table(etaPostTab,1),3),
+    round(log(prop.table(with(tmp,t(eta[,1:etaM]))%*%om,1))*etaPostTab
+	  -log(prop.table(with(tmp0,t(eta[,1:etaM]))%*%om,1))*etaPostTab,1)
+  )
+
+  sum(log(prop.table(with(tmp,t(eta[,1:etaM]))%*%om,1))*etaPostTab)
+
+  sum(log(prop.table(with(tmp0,t(eta[,1:etaM]))%*%om,1))*etaPostTab)
+
+
+
 
   ## round(cbind(lambdaUpdate,with(tmp,lambda[1:lambdaM]),lambdaPostTab,colSums(lambdaN1),colSums(lambdaN0)),3)
 
-  tmp$lambda[1:tmp$lambdaM] <- lambdaUpdate
+  ## neutrophils under counted?
 #+end_src
 
 * tuneup
@@ -1040,3 +1055,7 @@ values for small r.
   }
 
 #+end_src
+
+
+* deviance
+
