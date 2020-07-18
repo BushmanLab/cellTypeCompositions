@@ -904,7 +904,7 @@ values for small r.
     ## etaM by J results 
       lambdaRhoComp <-
 	t((1.0-rowSums(uop)) * with(scan,eta[,1:etaM])) * lambdaN0
-    
+
       etaVisTab <- sapply( 1:scan$etaM, function(eta_indx){ 
 	eta_elt <- with(scan,eta[,eta_indx])  
 	rho_elt <- uop*eta_elt
@@ -1039,7 +1039,31 @@ values for small r.
 
     etaTab.each_row() /= sum(etaTab, 0L);
 
-    return List::create(_["etaTab"] = etaTab );
+    // eta.head_cols(etaM) = etaTab;
+
+   mat lambdaN1(etaM, lambdaM, fill::zeros );
+
+   for (int ieta = 0L; ieta < etaM; ieta++){
+     double rhoplus =  sum(trans(eta.col(ieta))*om);
+     for (int ilambda = 0L; ilambda <lambdaM; ilambda++)
+       if (etaLambdaTab(ieta,ilambda) != 0L)
+	 lambdaN1(ieta, ilambda) =
+	   rhoplus * (
+		      (double) rN0GivenN1(etaLambdaTab(ieta,ilambda),
+					  lambda(ilambda), rhoplus) +
+		      (double) etaLambdaTab(ieta,ilambda));
+   }
+
+   rowvec lambdaUpdate(lambdaM);
+   for (int ilambda = 0L; ilambda<lambdaM; ilambda++)
+     lambdaUpdate(ilambda) =
+       Rf_rgamma(lambdaAlpha + (double) lambdaPostTab(ilambda),
+		 1.0/(lambdaBeta + sum(lambdaN1.col(ilambda))));
+
+   // lambda>head_cols(lambdaM) = lambdaUpdate;
+
+   return List::create(_["eta"] = etaTab,
+		       _["lambda"] = lambdaUpdate);
   }
 
 
