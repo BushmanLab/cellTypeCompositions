@@ -854,25 +854,35 @@ values for small r.
 ** sampleParms
 
 #+begin_src cpp :noweb yes :tangle nobuild/sampleParms.cpp
-    <<arma-headers>>
+  <<arma-headers>>
   <<rmultnm>>
-
+  <<rN0GivenN1>>
+  <<sampleParms>>
 #+end_src
 
-#+begin_src R :noweb yes :session *R:cellTypeCompositions*
+#+begin_src R :session *R:cellTypeCompositions*
+  Rcpp::sourceCpp("nobuild/sampleParms.cpp")
 
+  tmp0 <- rlang::duplicate(tmp)
+
+  res <-
+    with(tmp,
+	 sampleParms(wtab$tab, wtab$data.index-1L, om, dataToEta-1L, dataToLambda-1L,
+		     eta, etaM, lambda, lambdaN, lambdaM, dprior=1.0,
+		     lambdaAlpha=1.0, lambdaBeta=0.01, dpriorLambda=1.0,
+		     verbose = 1L))
 #+end_src
 
 #+begin_src R
   tmp0 <- tmp
 
 
-  tuneScan <- function(data, uop, scan, nreps=50L,
+  tuneScan <- function(tab, data.index, uop, scan, nreps=50L,
 		       dprior=1.0, lambdaAlpha=1.0, lambdaBeta=0.01){
-  
+
     etaLambdaTab <- with(scan,table(dataToEta,dataToLambda))
-    lambdaPostTab <- xtabs(rowSums(with(data,tab[data.index,]))~ scan$dataToLambda)
-    etaPostTab <- xtabs(with(data,tab[data.index,])~ scan$dataToEta)
+    lambdaPostTab <- xtabs(rowSums(tab[data.index,])~ scan$dataToLambda)
+    etaPostTab <- xtabs(tab[data.index,]~ scan$dataToEta)
 
 
     llk <- NULL
@@ -891,9 +901,10 @@ values for small r.
 	}
       }
 
+    ## etaM by J results 
       lambdaRhoComp <-
 	t((1.0-rowSums(uop)) * with(scan,eta[,1:etaM])) * lambdaN0
-
+    
       etaVisTab <- sapply( 1:scan$etaM, function(eta_indx){ 
 	eta_elt <- with(scan,eta[,eta_indx])  
 	rho_elt <- uop*eta_elt
@@ -935,9 +946,9 @@ values for small r.
     scan
   }
 
-  res <- tuneScan(wtab,om,tmp0)
-  res2 <-   tuneScan(wtab,om,res)
-  plot(llk)
+  res <- tuneScan(wtab$tab,wtab$data.index,om,tmp0)
+  res2 <- tuneScan(wtab$tab,wtab$data.index,om,res)
+  plot(res$logLik)
 
   plot(llk[-(1:20)])
 
@@ -963,6 +974,7 @@ values for small r.
   ## neutrophils under counted?
 #+end_src
 
+
 * tuneup
 
 #+name: sampleParms
@@ -979,21 +991,77 @@ values for small r.
 		   arma::mat eta, int etaM, 
 		   arma::rowvec lambda, arma::vec& lambdaN, int lambdaM,
 		   double dprior,
+		   double lambdaAlpha, double lambdaBeta,
 		   double dpriorLambda, int verbose=0L){
     if (verbose>1L) Rprintf("starting....\n");
     int J = om.n_rows;
+    int ndat = di.size();
+    ivec rplus = sum( tab, 1L);
+    imat etaLambdaTab(etaM, lambdaM, fill::zeros );
+    ivec lambdaPostTab(lambdaM, fill::zeros );
+    imat etaPostTab(etaM, J, fill::zeros );
+
+    for (int idat = 0; idat < ndat; idat++){
+      etaLambdaTab( dataToEta(idat) , dataToLambda(idat))++;
+      lambdaPostTab( dataToLambda(idat) ) += rplus(di(idat));
+      etaPostTab.row( dataToEta(idat) ) += tab.row(di(idat));
+    }
+
+    vec lambdaN0( etaM , fill::zeros);
+
+    for (int ieta = 0L; ieta<etaM; ieta++)
+      for (int ilambda = 0L; ilambda < lambdaM; ilambda++)
+	if (etaLambdaTab(ieta, ilambda) != 0L){
+	  lambdaN0(ieta) +=
+	    lambda(ilambda) * ((double)
+	    rN0GivenN1(etaLambdaTab(ieta,ilambda),
+			lambda(ilambda),
+		       sum(trans(eta.col(ieta))*om))
+	     + (double) etaLambdaTab(ieta,ilambda));
+	}
+
+    mat lambdaRhoComp = trans((1.0 - sum(om,1L)) % eta.head_cols(etaM).each_col());
+    lambdaRhoComp.each_col() %= lambdaN0;
+
+    mat etaTab( J, etaM);
+    for (int ieta = 0L; ieta<etaM; ieta++){
+      mat XY = diagmat(eta.col(ieta)) * om;
+      for (int iY = 0; iY<J; iY++){
+	ivec X(J, fill::zeros);
+	rmultnm(etaPostTab(ieta,iY), XY.colptr(iY), J, X.memptr());
+	etaTab.col(ieta) += conv_to<vec>::from(X);
+      }
+      for (int iX = 0L; iX<J; iX++){
+	etaTab(iX,ieta) += Rf_rpois(lambdaRhoComp(ieta, iX));
+	etaTab(iX,ieta) = Rf_rgamma(etaTab(iX,ieta)+dprior, 1.0);
+      }
+    }
+
+    etaTab.each_row() /= sum(etaTab, 0L);
+
+    return List::create(_["etaTab"] = etaTab );
+  }
+
+
+
+#+end_src
+  
+#+begin_src cpp
     vec omsum = sum(om, 1L);
     ivec r = sum( tab, 1L); // rowSums
     int ndat = di.size();
-      if (verbose>1L) Rprintf("inits\n");
-  // eta.by.ct
+    if (verbose>1L) Rprintf("inits\n");
+    // eta.by.ct aka etaPostTab in R
     imat eta_by_ct( etaM, J , fill::zeros );
-  // eta.by.lambda.by.r
-    imat eta_by_lambda_by_r(etaM, lambdaM, fill::zeros );
+    // eta.by.lambda.by.r aka etaLambdaTab in R
+    imat eta_by_lambda_tab(etaM, lambdaM, fill::zeros );
+    // lambda_post_tab
+    imat lambda_post_tab(lambdaM, J, fill::zeroes );
 
     for (int i = 0L; i<ndat; i++){
-      eta_by_ct.row( dataToEta(i)) = eta_by_ct.row( dataToEta(i) ) + tab.row( di(i) );
-      eta_by_lambda_by_r( dataToEta(i) , dataToLambda(i) ) += r( di(i) );
+      eta_by_ct.row( dataToEta(i))  += tab.row( di(i) );
+      lambda_post_tab.row( dataToLambda(i)) +=  tab.row( di(i) );
+      eta_by_lambda_tab( dataToEta(i) , dataToLambda(i) )++ );
     }
     if (verbose>1L) Rprintf("eta.by.lambda.by.r\n");
 
@@ -1008,8 +1076,8 @@ values for small r.
     mat R_minus_r( etaM, lambdaM );
     for (int i = 0L; i<etaM; i++)
       for (int j = 0L; j<lambdaM; j++)
-	R_minus_r(i, j) = (eta_by_lambda_by_r(i,j) == 0L) ? 0.0 :
-	  Rf_rnbinom(( double) eta_by_lambda_by_r(i,j), rhoTilde(i,j));
+	R_minus_r(i, j) = (eta_by_lambda_tab(i,j) == 0L) ? 0.0 :
+	  Rf_rnbinom(( double) eta_by_lambda_tab(i,j), rhoTilde(i,j));
     if (verbose>1L) Rprintf("R_minus_r\n");
 
   // R_by_eta
@@ -1026,7 +1094,7 @@ values for small r.
       if (verbose>1L) Rprintf("dropped\n");
 
   // R
-    mat R = R_minus_r + eta_by_lambda_by_r;
+    mat R = R_minus_r + eta_by_lambda_tab;
       if (verbose>1L) Rprintf("R\n");
   // eta.by.ct.all
     imat eta_by_ct_all = eta_by_ct + dropped.t();
@@ -1049,12 +1117,12 @@ values for small r.
 
     for (int i = 0L; i<etaM; i++)
       for (int j = 0L; j<lambdaM; j++)
-	R_minus_r(i, j) = (eta_by_lambda_by_r(i,j) == 0L) ? 0.0 :
-	  Rf_rnbinom(( double) eta_by_lambda_by_r(i,j), rhoTilde(i,j));
+	R_minus_r(i, j) = (eta_by_lambda_tab(i,j) == 0L) ? 0.0 :
+	  Rf_rnbinom(( double) eta_by_lambda_tab(i,j), rhoTilde(i,j));
 
   // R
 
-    R = R_minus_r + eta_by_lambda_by_r;
+    R = R_minus_r + eta_by_lambda_tab;
   // 
   // update lambda
 
@@ -1073,3 +1141,77 @@ values for small r.
 
 * deviance
 
+* scratch
+
+#+begin_src R :noweb yes
+  code.string  <-
+    '
+    <<arma-headers>>
+
+    // [[Rcpp::export]]
+    arma::mat XX(arma::mat Y, arma::vec Z ){
+    arma::mat X2 = Y.each_col() % Z;
+    return X2;
+    }'
+
+  Rcpp::sourceCpp( code=code.string)
+
+  XX(diag(2)+1,1:2)
+#+end_src
+
+
+#+begin_src R :noweb yes
+  code.string  <-
+    '
+   <<arma-headers>>
+  // [[Rcpp::export]]
+  arma::mat XX(arma::mat om, arma::mat eta, arma::vec Z ){
+  arma::mat lambdaRhoComp = trans((1.0 - sum(om,1L)) % eta.each_col());
+  lambdaRhoComp.each_col() %= Z;
+    return lambdaRhoComp;
+    }'
+
+  Rcpp::sourceCpp( code=code.string)
+
+  XX((diag(2)+1)/4, prop.table(matrix(1:6,nr=2),2),c(0.3,0.5,0.8)) 
+
+
+#+end_src
+
+#+begin_src R :noweb yes
+    code.string  <-
+      '
+  <<arma-headers>>
+  // [[Rcpp::export]]
+  arma::mat XX(arma::mat om, arma::ivec Z ){
+  om.each_col() += conv_to<vec>::from(Z);
+  return om;
+  }'
+
+    Rcpp::sourceCpp( code=code.string)
+
+    XX((diag(2)+1)/4, 1:2)
+
+
+#+end_src
+
+#+begin_src R :noweb yes
+    code.string  <-
+      '
+  <<arma-headers>>
+  // [[Rcpp::export]]
+  arma::mat XX(arma::mat om){
+  om.each_row() /= sum(om,0L);
+  return om;
+  }'
+
+    Rcpp::sourceCpp( code=code.string)
+
+    XX((diag(2)+1)/4)
+
+
+#+end_src
+
+
+
+  
