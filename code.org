@@ -863,14 +863,48 @@ values for small r.
 #+begin_src R :session *R:cellTypeCompositions*
   Rcpp::sourceCpp("nobuild/sampleParms.cpp")
 
+  ept <- with(wtab, xtabs(tab[data.index,]~tmp$dataToEta))
+
   tmp0 <- rlang::duplicate(tmp)
 
-  res <-
+  res <- 
     with(tmp,
 	 sampleParms(wtab$tab, wtab$data.index-1L, om, dataToEta-1L, dataToLambda-1L,
 		     eta, etaM, lambda, lambdaN, lambdaM, dprior=1.0,
 		     lambdaAlpha=1.0, lambdaBeta=0.01, dpriorLambda=1.0,
 		     verbose = 1L))
+
+
+  res0 <- res
+  res <- rlang::duplicate(tmp)
+
+  llk <- NULL
+  system.time(for (i in 1:100){
+    res <- with(tmp,
+		sampleParms(wtab$tab, wtab$data.index-1L, om,
+			    dataToEta-1L, dataToLambda-1L,
+			    res$eta, etaM, res$lambda, lambdaN, lambdaM, dprior=1.0,
+			    lambdaAlpha=1.0, lambdaBeta=0.01, dpriorLambda=1.0,niter=20L,
+			    verbose = 1L))
+    llk <- c(llk,sum(ept*log(prop.table(t(res$eta)%*%om,1))))
+    if (anyNA(res)) break
+    res2 <- res
+  })
+
+
+  ols <- prop.table(pmax(solve(t(om),t(ept)),1.0),2)
+
+  print(sum(ept*t(log(prop.table(ols,2)))))
+  print(sum(ept*t(log(prop.table(with(tmp,eta[,1:etaM]),2)))))
+
+  plot(llk,type='l')
+
+  tmp$eta <- res$eta
+  tmp$lambda <- res$lambda
+
+  ## rmultnm, rN0GivenN1, and tuneScan needed:
+  res3 <- tuneScan(wtab$tab,wtab$data.index,om,tmp)
+  summary(res3$logLik)
 #+end_src
 
 #+begin_src R
@@ -947,7 +981,7 @@ values for small r.
   }
 
   res <- tuneScan(wtab$tab,wtab$data.index,om,tmp0)
-  res2 <- tuneScan(wtab$tab,wtab$data.index,om,res)
+  res3 <- tuneScan(wtab$tab,wtab$data.index,om,res)
   plot(res$logLik)
 
   plot(llk[-(1:20)])
@@ -992,7 +1026,7 @@ values for small r.
 		   arma::rowvec lambda, arma::vec& lambdaN, int lambdaM,
 		   double dprior,
 		   double lambdaAlpha, double lambdaBeta,
-		   double dpriorLambda, int verbose=0L){
+		   double dpriorLambda, int niter = 5L, int verbose=0L){
     if (verbose>1L) Rprintf("starting....\n");
     int J = om.n_rows;
     int ndat = di.size();
@@ -1007,63 +1041,66 @@ values for small r.
       etaPostTab.row( dataToEta(idat) ) += tab.row(di(idat));
     }
 
-    vec lambdaN0( etaM , fill::zeros);
+    for (int iter = 0L; iter<niter; iter++){
+      vec lambdaN0( etaM , fill::zeros);
 
-    for (int ieta = 0L; ieta<etaM; ieta++)
-      for (int ilambda = 0L; ilambda < lambdaM; ilambda++)
-	if (etaLambdaTab(ieta, ilambda) != 0L){
-	  lambdaN0(ieta) +=
-	    lambda(ilambda) * ((double)
-	    rN0GivenN1(etaLambdaTab(ieta,ilambda),
-			lambda(ilambda),
-		       sum(trans(eta.col(ieta))*om))
-	     + (double) etaLambdaTab(ieta,ilambda));
+      for (int ieta = 0L; ieta<etaM; ieta++)
+	for (int ilambda = 0L; ilambda < lambdaM; ilambda++)
+	  if (etaLambdaTab(ieta, ilambda) != 0L){
+	    lambdaN0(ieta) +=
+	      lambda(ilambda) * ((double)
+				 rN0GivenN1(etaLambdaTab(ieta,ilambda),
+					    lambda(ilambda),
+					    sum(trans(eta.col(ieta))*om))
+				 + (double) etaLambdaTab(ieta,ilambda));
+	  }
+
+      mat lambdaRhoComp = trans((1.0 - sum(om,1L)) % eta.head_cols(etaM).each_col());
+      lambdaRhoComp.each_col() %= lambdaN0;
+
+      mat etaTab( J, etaM, fill::zeros);
+      for (int ieta = 0L; ieta<etaM; ieta++){
+	mat XY = diagmat(eta.col(ieta)) * om;
+	for (int iY = 0; iY<J; iY++){
+	  ivec X(J, fill::zeros);
+	  rmultnm(etaPostTab(ieta,iY), XY.colptr(iY), J, X.memptr());
+	  etaTab.col(ieta) += conv_to<vec>::from(X);
 	}
-
-    mat lambdaRhoComp = trans((1.0 - sum(om,1L)) % eta.head_cols(etaM).each_col());
-    lambdaRhoComp.each_col() %= lambdaN0;
-
-    mat etaTab( J, etaM);
-    for (int ieta = 0L; ieta<etaM; ieta++){
-      mat XY = diagmat(eta.col(ieta)) * om;
-      for (int iY = 0; iY<J; iY++){
-	ivec X(J, fill::zeros);
-	rmultnm(etaPostTab(ieta,iY), XY.colptr(iY), J, X.memptr());
-	etaTab.col(ieta) += conv_to<vec>::from(X);
+	for (int iX = 0L; iX<J; iX++){
+	  etaTab(iX,ieta) += Rf_rpois(lambdaRhoComp(ieta, iX));
+	  etaTab(iX,ieta) = Rf_rgamma(etaTab(iX,ieta)+dprior, 1.0);
+	}
       }
-      for (int iX = 0L; iX<J; iX++){
-	etaTab(iX,ieta) += Rf_rpois(lambdaRhoComp(ieta, iX));
-	etaTab(iX,ieta) = Rf_rgamma(etaTab(iX,ieta)+dprior, 1.0);
+
+      rowvec etaColSum = sum(etaTab, 0L);
+      etaTab.each_row() /= etaColSum;
+
+      eta.head_cols(etaM) = etaTab;
+
+      mat lambdaN1(etaM, lambdaM, fill::zeros );
+
+      for (int ieta = 0L; ieta < etaM; ieta++){
+	double rhoplus =  sum(trans(eta.col(ieta))*om);
+	for (int ilambda = 0L; ilambda <lambdaM; ilambda++)
+	  if (etaLambdaTab(ieta,ilambda) != 0L)
+	    lambdaN1(ieta, ilambda) =
+	      rhoplus * (
+			 (double) rN0GivenN1(etaLambdaTab(ieta,ilambda),
+					     lambda(ilambda), rhoplus) +
+			 (double) etaLambdaTab(ieta,ilambda));
       }
+
+      rowvec lambdaUpdate(lambdaM);
+      for (int ilambda = 0L; ilambda<lambdaM; ilambda++)
+	lambdaUpdate(ilambda) =
+	  Rf_rgamma(lambdaAlpha + (double) lambdaPostTab(ilambda),
+		    1.0/(lambdaBeta + sum(lambdaN1.col(ilambda))));
+
+      lambda.head(lambdaM) = lambdaUpdate;
     }
-
-    etaTab.each_row() /= sum(etaTab, 0L);
-
-    // eta.head_cols(etaM) = etaTab;
-
-   mat lambdaN1(etaM, lambdaM, fill::zeros );
-
-   for (int ieta = 0L; ieta < etaM; ieta++){
-     double rhoplus =  sum(trans(eta.col(ieta))*om);
-     for (int ilambda = 0L; ilambda <lambdaM; ilambda++)
-       if (etaLambdaTab(ieta,ilambda) != 0L)
-	 lambdaN1(ieta, ilambda) =
-	   rhoplus * (
-		      (double) rN0GivenN1(etaLambdaTab(ieta,ilambda),
-					  lambda(ilambda), rhoplus) +
-		      (double) etaLambdaTab(ieta,ilambda));
-   }
-
-   rowvec lambdaUpdate(lambdaM);
-   for (int ilambda = 0L; ilambda<lambdaM; ilambda++)
-     lambdaUpdate(ilambda) =
-       Rf_rgamma(lambdaAlpha + (double) lambdaPostTab(ilambda),
-		 1.0/(lambdaBeta + sum(lambdaN1.col(ilambda))));
-
-   // lambda>head_cols(lambdaM) = lambdaUpdate;
-
-   return List::create(_["eta"] = etaTab,
-		       _["lambda"] = lambdaUpdate);
+  
+    return List::create(_["eta"] = eta.head_cols(etaM),
+			_["lambda"] = lambda.head(lambdaM));
   }
 
 
