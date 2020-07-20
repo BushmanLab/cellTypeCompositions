@@ -870,8 +870,8 @@ values for small r.
   res <- 
     with(tmp,
 	 sampleParms(wtab$tab, wtab$data.index-1L, om, dataToEta-1L, dataToLambda-1L,
-		     eta, etaM, lambda, lambdaN, lambdaM, dprior=1.0,
-		     lambdaAlpha=1.0, lambdaBeta=0.01, dpriorLambda=1.0,
+		     eta, etaM, lambda, lambdaM, dprior=1.0,
+		     lambdaAlpha=1.0, lambdaBeta=0.01,
 		     verbose = 1L))
 
 
@@ -883,10 +883,10 @@ values for small r.
     res <- with(tmp,
 		sampleParms(wtab$tab, wtab$data.index-1L, om,
 			    dataToEta-1L, dataToLambda-1L,
-			    res$eta, etaM, res$lambda, lambdaN, lambdaM, dprior=1.0,
-			    lambdaAlpha=1.0, lambdaBeta=0.01, dpriorLambda=1.0,niter=20L,
+			    res$eta, etaM, res$lambda, lambdaM, dprior=1.0,
+			    lambdaAlpha=1.0, lambdaBeta=0.01, niter=20L,
 			    verbose = 1L))
-    llk <- c(llk,sum(ept*log(prop.table(t(res$eta)%*%om,1))))
+    llk <- c(llk,sum(ept*log(prop.table(t(with(res,eta[,1:etaM]))%*%om,1))))
     if (anyNA(res)) break
     res2 <- res
   })
@@ -1023,10 +1023,10 @@ values for small r.
 		   arma::ivec dataToEta,
 		   arma::ivec dataToLambda,
 		   arma::mat eta, int etaM, 
-		   arma::rowvec lambda, arma::vec& lambdaN, int lambdaM,
+		   arma::rowvec lambda, int lambdaM,
 		   double dprior,
 		   double lambdaAlpha, double lambdaBeta,
-		   double dpriorLambda, int niter = 5L, int verbose=0L){
+		   int niter = 5L, int verbose=0L){
     if (verbose>1L) Rprintf("starting....\n");
     int J = om.n_rows;
     int ndat = di.size();
@@ -1098,9 +1098,11 @@ values for small r.
 
       lambda.head(lambdaM) = lambdaUpdate;
     }
-  
-    return List::create(_["eta"] = eta.head_cols(etaM),
-			_["lambda"] = lambda.head(lambdaM));
+
+    return List::create(_["eta"] = eta,
+			_["lambda"] = lambda,
+			_["etaM"] = etaM,
+			_["lambdaM"] = lambdaM);
   }
 
 
