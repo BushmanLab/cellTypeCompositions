@@ -378,7 +378,7 @@ gibbsScan <- function(wtab,
                         pass2[["lambda"]],
                         pass2[["lambdaM"]],
                         dprior, lambdaShape, lambdaRate, niter.tune, verbose)
-browser() ## ok to here, I think
+
         pass2[["eta"]] <- sparm[["eta"]]
         pass2[["lambda"]] <- sparm[["lambda"]]
         
@@ -402,18 +402,19 @@ browser() ## ok to here, I think
         }
     }
     
+
+    log.posterior <- sparm[["logLik"]] - sum(wtab[["n"]]*lfactorial(wtab[["tab"]]))
     
-    log.posterior <-
-      with(pass2,
-           c(logpost(
-             tab, di, om, eta, etaN, dataToEta, etaM, alphaEta,
-             lambda, lambdaN, dataToLambda,
-             lambdaM, alphaLambda),
-             alpha.eta = log.dalphaEta, alpha.lambda = log.dalphaLambda))
+    ## log.posterior <-
+    ##   with(pass2,
+    ##        c(logpost(
+    ##          tab, di, om, eta, etaN, dataToEta, etaM, alphaEta,
+    ##          lambda, lambdaN, dataToLambda,
+    ##          lambdaM, alphaLambda),
+    ##          alpha.eta = log.dalphaEta, alpha.lambda = log.dalphaLambda))
+     
+    keepers[[ i ]] <- keep.fun(pass2, log.posterior, i,nkeep,keep)             
     
-    keepers[[ i ]] <-
-      keep.fun(pass2,log.posterior,i,nkeep,keep)             
-             
 
 
   }
