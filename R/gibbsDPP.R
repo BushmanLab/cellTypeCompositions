@@ -167,9 +167,10 @@ gibbsScan <- function(wtab,
                       lambdaSize = 20L,
 		      ijvals = 0L,
                       abEta = c(0.0001,0.0001),
-                      abLambda = c(1.0,1.0),
-		      verbose = FALSE, dpriors = c(1.0,1.0),
-                      keep = TRUE,
+                      abLambda = c(0.01,0.01),
+		      verbose = FALSE, dprior = 1.0,
+                      lambdaShape = 1.0, lambdaRate=0.01,
+                      keep = TRUE, niter.tune=10L,
 		      ...){
   ## define helper functions:
 
@@ -206,7 +207,7 @@ gibbsScan <- function(wtab,
     rgamma(1,shape+plus1, rate = rate)
   }
   
-
+## revise to use deviance
   logpost <- function(tab,di,om,eta,etaN,dataToEta,etaM,alpha,
                       lambda,lambdaN,dataToLambda,
                       lambdaM,alphaLambda){
@@ -272,9 +273,6 @@ gibbsScan <- function(wtab,
     om[om==0.0] <- .Machine[["double.eps"]]
     warning("Converted zeroes in om to machine epsilon")
   }
-  stopifnot( length( dpriors ) == 2L )
-  dprior <- dpriors[ 1L ]
-  dpriorLambda <- dpriors[ 2L ]
   if (is.null(eta))  eta <- array(0.0,c(nrow(om),etaCols))
   if (is.null(dataToEta)) dataToEta <- rep(-1L,length(wtab[["data.index"]]))
   if (is.null(eta))
@@ -368,19 +366,22 @@ gibbsScan <- function(wtab,
                          pass1[["alphaLambda"]],
                          ijvals = ijvals,
                          verbose = verbose,
-                         dprior = dpriors[1])
+                         dprior = dprior)
       
-      pass2[c("eta", "lambda")] <-
-        sampleParms(tab, di, om,
-                    pass2[["dataToEta"]],
-                    pass2[["dataToLambda"]],
-                    pass2[["eta"]],
-                    pass2[["etaM"]],
-                    pass2[["lambda"]],
-                    pass2[["lambdaN"]],
-                    pass2[["lambdaM"]],
-                    dprior, dpriorLambda, verbose)
 
+        sparm <- 
+            sampleParms(tab, di, om,
+                        pass2[["dataToEta"]],
+                        pass2[["dataToLambda"]],
+                        pass2[["eta"]],
+                        pass2[["etaM"]],
+                        pass2[["lambda"]],
+                        pass2[["lambdaM"]],
+                        dprior, lambdaShape, lambdaRate, niter.tune, verbose)
+browser() ## ok to here, I think
+        pass2[["eta"]] <- sparm[["eta"]]
+        pass2[["lambda"]] <- sparm[["lambda"]]
+        
       ## update alpha*
       if (!is.null(abEta)) {
         pass2[["alphaEta"]] <-
