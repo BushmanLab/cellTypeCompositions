@@ -905,6 +905,13 @@ values for small r.
   ## rmultnm, rN0GivenN1, and tuneScan needed:
   res3 <- tuneScan(wtab$tab,wtab$data.index,om,tmp)
   summary(res3$logLik)
+
+
+  ##
+
+  res4 <- gibbsScan(wtab,om)
+
+  res5 <- gibbsScan(wtab,om,nkeep=5L,verbose=TRUE)
 #+end_src
 
 #+begin_src R
@@ -1099,10 +1106,23 @@ values for small r.
       lambda.head(lambdaM) = lambdaUpdate;
     }
 
+    double dev = as_scalar(log(lambda.head(lambdaM)) * lambdaPostTab);
+    mat rho = trans(eta.head_cols(etaM))*om;
+    for (int ieta = 0L; ieta<etaM; ieta++){
+      double rhoplus =  sum(rho.row(ieta));
+      for (int ilambda = 0L; ilambda<lambdaM; ilambda++)
+	dev -=
+	  etaLambdaTab(ieta, ilambda) *
+	  (lambda(ilambda)*rhoplus +
+	   log( 1.0 - exp( - lambda(ilambda)*rhoplus)));
+      for (int j = 0L; j<J; j++) dev += etaPostTab(ieta,j)*log(rho(ieta,j));
+    }
+
     return List::create(_["eta"] = eta,
 			_["lambda"] = lambda,
 			_["etaM"] = etaM,
-			_["lambdaM"] = lambdaM);
+			_["lambdaM"] = lambdaM,
+			_["logLik"] = dev);
   }
 
 
