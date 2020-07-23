@@ -25,7 +25,7 @@
   // log probability of r given p and lambda
 
   // log likelihood kernel sans constants in data r1!, r2!, ...
-  double llkr( int rsum, int n, double p, double lambda ){
+  inline double llkr( int rsum, int n, double p, double lambda ){
     double llk;
     if (ISNA(lambda)) {
       llk = 0.0;
@@ -41,7 +41,7 @@
 
   // lambda vectorized log probability of r given p and lambda
 
-  arma::rowvec logprob_p( int r, double p, arma::rowvec lambda ){
+  inline arma::rowvec logprob_p( int r, double p, arma::rowvec lambda ){
     rowvec result(lambda.size());
     for (int i = 0L; i<lambda.size(); i++) 
       result[i] = llkr( r, 1L, p, lambda[i] );
@@ -50,7 +50,7 @@
 
   // p vectorized log probability of r given p and lambda
 
-   arma::rowvec logprob_l( int r, arma::rowvec p,  double lambda ){
+   inline arma::rowvec logprob_l( int r, arma::rowvec p,  double lambda ){
     rowvec result(p.size());
     for (int i = 0L; i<p.size(); i++) 
       result[i] = llkr( r, 1L, p[i], lambda );
@@ -110,7 +110,7 @@
 #+begin_src cpp
 
   // sample one index
-  int newIndex(arma::rowvec logpr){
+  inline int newIndex(arma::rowvec logpr){
     double maxlogpr = max(logpr);
     double prcum = 0.0;
     for (int i =0;i<logpr.size(); i++){
@@ -132,8 +132,7 @@
 
   int newIndex(arma::rowvec logpr);
 
-  // [[Rcpp::export]]
-  double rlamGivenR(double rho,double alpha,double beta,int r){
+  inline double rlamGivenR(double rho,double alpha,double beta,int r){
 
     arma::rowvec lkp(KMAX);
     for (int k = 0; k<KMAX; k++) lkp[k] = -(r+alpha)*log(beta+rho*(1.0+k));
@@ -147,6 +146,9 @@
   }
 
 #+end_src
+
+
+Resizing is rather time consuming.
 
 #+name: updateXX
 #+begin_src cpp
@@ -261,7 +263,7 @@
 
 #+name: rmultnm
 #+begin_src cpp :noweb yes
-  void rmultnm(int n, double* prob, int k, int* rn){
+  inline void rmultnm(int n, double* prob, int k, int* rn){
     double prsum = 0.0;
     for (int i=0; i<k; i++) prsum += prob[i];
     for (int i=0; i<k; i++) prob[i] /= prsum;
@@ -271,8 +273,7 @@
 
 #+name: rN0GivenN1
 #+begin_src cpp :noweb yes
-  // [[Rcpp::export]]
-  int rN0GivenN1( int N1, double lambda, double rhoplus ){
+  inline int rN0GivenN1( int N1, double lambda, double rhoplus ){
     return  Rf_rnbinom( (double) N1, -expm1(-lambda * rhoplus ) );
   }
 
@@ -913,7 +914,18 @@ values for small r.
 
   res5 <- gibbsScan(wtab,om,nkeep=5L,alphaLambda=0.1,abLambda=c(0.1,50.0),verbose=TRUE)
 
-  ## this does matches up with abbreviated version implemented in gibbsScan
+  with(res5[[5]],cbind(lambda,lambdaN))
+
+  with(res5[[5]],cbind(round(t(eta),3),etaN))
+
+  with(res5[[5]],plot(hclust(dist(t(eta))),labels=FALSE))
+
+  res6 <- gibbsScan(wtab,om,nkeep=5L,nthin=5L,alphaLambda=0.1,abLambda=c(0.1,50.0),verbose=TRUE)
+
+  res7 <- update(res6,auxEtaM=0L,auxLambdaM=0L)
+  res8 <- update(res7,auxEtaM=5L,auxLambdaM=5L)
+  res9 <- update(res8,auxEtaM=0L,auxLambdaM=0L)
+  ## this matches up with abbreviated version implemented in gibbsScan
   sum(dpois(wtab$tab[wtab$data.index,],
 	    with(res4[[1]],(t(eta)%*%om)[dataToEta,] * lambda[dataToLambda]),
 	    log=TRUE))-
