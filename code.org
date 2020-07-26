@@ -125,19 +125,55 @@
 
 #+end_src
 
+#+name: rkReject
+#+begin_src cpp
+  #define INDEF_INT( x )   -pow((beta+rho*(1+x)),-(alpha+r-1))/(rho*(alpha+r-1))
+
+  inline double rkReject (double rho,double alpha,double beta, int r,int z){
+    vec kpz(z+1L, fill::zeros);
+    double kpztot = 0.0;
+    int k;
+    for (k = 0L; k < z; k++){
+      kpz[k] = pow(beta+rho*(1+k),-(alpha+r));
+      kpztot += kpz[k];
+    }
+    kpz[ z ] = -INDEF_INT(z-0.5);
+    kpztot += kpz[z];
+    bool  reject = true;
+    while( reject ){
+      double kx = Rf_runif(0.0,kpztot);
+      double kpsum=kpz[ 0L ];
+      for (k = 0L; k<z && kpsum < kx; k++)
+	kpsum += kpz[k+1L];
+      if (k==z){
+	double x = Rf_runif(0.0,1.0);
+	double kcand =
+	  (beta/rho + z + 0.5)/pow(x, 1.0/(alpha+r-1.0)) - beta/rho - 0.5;
+	kcand = Rf_ftrunc(kcand);
+	double v = INDEF_INT(kcand+0.5)-INDEF_INT(kcand-0.5);
+	double y = Rf_runif(0.0,v);
+	reject = y >= pow(beta+rho*(1+kcand),-(alpha+r));
+	k = (int) kcand;
+      } else {
+	reject = false;
+
+      }
+    }
+    return (double) k;
+  }
+
+#+end_src
+
+This next function takes a lot of time. Maybe it helps to trim it.
+
 #+name: rlamGivenR
 #+begin_src cpp
 
-  #define KMAX 1000L
-
-  int newIndex(arma::rowvec logpr);
+  #define KMAX 5L
 
   inline double rlamGivenR(double rho,double alpha,double beta,int r){
 
-    arma::rowvec lkp(KMAX);
-    for (int k = 0; k<KMAX; k++) lkp[k] = -(r+alpha)*log(beta+rho*(1.0+k));
-
-    int indx = newIndex(lkp);
+    double indx = rkReject(rho, alpha, beta, r, KMAX);
 
     double rg = Rf_rgamma( alpha+r, 1.0/(beta+rho*(1+indx)));
 
@@ -270,6 +306,8 @@ Resizing is rather time consuming.
     Rf_rmultinom(n, prob,k,rn);
   }
 #+end_src
+
+
 
 #+name: rN0GivenN1
 #+begin_src cpp :noweb yes
@@ -569,19 +607,39 @@ Rcpp::sourceCpp("tempfilename.cpp") should work.
   ## test here
 #+end_src
 
+
+** rkReject
+
+
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
+      Rcpp::sourceCpp(code='
+  <<arma-headers>>
+  <<rkReject>>
+  // [[Rcpp::export]]
+    double call_rkReject (double rho, double alpha, double beta, int r=1,int z=4){
+   return rkReject ( rho, alpha, beta,  r, z);
+  }
+  ')
+#+end_src
+
+#+RESULTS:
+
 ** rlamGivenR
 
 #+begin_src R :noweb yes :session *R:cellTypeCompositions*
-  Rcpp::sourceCpp(code='
-  <<arma-headers>>
-  <<newIndex>>
-  <<rlamGivenR>>
-  // [[Rcpp::export]]
-  double call_rlamGivenR(double rho,double alpha,double beta,int r){
-  return rlamGivenR( rho, alpha, beta, r);}
-  ')
+    Rcpp::sourceCpp(code='
+    <<arma-headers>>
+    <<rkReject>>
+    <<rlamGivenR>>
+    // [[Rcpp::export]]
+    double call_rlamGivenR(double rho,double alpha,double beta,int r){
+    double res;
+    res = rlamGivenR( rho, alpha, beta, r);
+    return res;
+    }
+    ')
 
-  ## test here
+    ## test here
 #+end_src
 
 #+RESULTS:
@@ -596,11 +654,18 @@ Rcpp::sourceCpp("tempfilename.cpp") should work.
   }
 
   set.seed(1234)
-  clam <- replicate(10, call_rlamGivenR(.8, 1.0,.01,1))
-  set.seed(1234)
-  rlam <- replicate(10,rlambdaGivenR(.8, 1.0,.01,1))
+  clam <- replicate(1000, call_rlamGivenR(.8, 1.0,.01,1))
+  rlam <- replicate(1000,rlambdaGivenR(.8, 1.0,.01,1))
 
   all.equal(rlam,clam)
+#+end_src
+
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
+  microbenchmark::microbenchmark(call_rlamGivenR(.8, 1.0,.01,1))
+
+  ## apparently setting KMAX too a smaller value will do the trick, so
+  ## adaptively figure out what value to use.
+  ## look at rk.reject to figure this out.
 #+end_src
 
 
@@ -637,10 +702,10 @@ Rcpp::sourceCpp("tempfilename.cpp") should work.
 			_["verbose"] = verbose);
   }
 
-#+end_src
+#+end_src 
 
 #+begin_src R :noweb yes :session *R:cellTypeCompositions*
-Rcpp::sourceCpp("nobuild/test-updateXX.cpp")
+  Rcpp::sourceCpp("nobuild/test-updateXX.cpp")
 #+end_src
 
 #+RESULTS:
@@ -693,6 +758,7 @@ Rcpp::sourceCpp("nobuild/test-updateXX.cpp")
   for (i in 0L:4L){
     zlist <- call_updateXX(newinds[i+1],i,zlist)
   }
+
 
   ## update singleton existing case 2 
 
@@ -755,6 +821,7 @@ Rcpp::sourceCpp("nobuild/test-updateXX.cpp")
     zlist <- call_updateXX(1L, i, zlist)
   }
 
+
 #+end_src
 
 
@@ -767,6 +834,7 @@ Rcpp::sourceCpp("nobuild/test-updateXX.cpp")
   <<logprob_Rplus>>
   <<logprobMulti>>
   <<newIndex>>
+  <<rkReject>>
   <<rlamGivenR>>
   <<updateXX>>
   <<auxGibbs>>
@@ -835,6 +903,10 @@ values for small r.
 	  code ='
   <<arma-headers>>
   <<rN0GivenN1>>
+  // [[Rcpp::export]]
+  int call_rN0GivenN1( int N1, double lambda, double rhoplus ){
+  return rN0GivenN1( N1,  lambda, rhoplus );
+  }
   ')
 
   rho <- 0.8
@@ -844,8 +916,13 @@ values for small r.
   set.seed(123)
   if (isTRUE(all.equal(
     3 * (1-prob)/prob,
-    mean(replicate(10000,rN0GivenN1(3,lambda,rho))),
+    mean(replicate(10000,call_rN0GivenN1(3,lambda,rho))),
     tol=0.01))) "PASS" else "FAIL"
+
+#+end_src
+
+#+begin_src R :noweb yes :session *R:cellTypeCompositions*
+  microbenchmark::microbenchmark(call_rN0GivenN1(3,lambda,rho))
 
 #+end_src
 
@@ -907,8 +984,32 @@ values for small r.
   res3 <- tuneScan(wtab$tab,wtab$data.index,om,tmp)
   summary(res3$logLik)
 
+  ##
+  proc.time()
+  tmp  <- gibbsScan(wtab,om,nkeep=1L,alphaEta=10L,alphaLambda=0.1,
+		    auxEtaM=1L,auxLambdaM=1L,verbose=TRUE)
+  proc.time()
+
+  tmp2  <- update(tmp,auxEtaM=1L,auxLambdaM=1L,verbose=TRUE)
+  proc.time()
+
+  tmp2  <- update(tmp,auxLambdaM=10L,verbose=TRUE)
+  proc.time()
+
+  tmp2  <- update(tmp,auxEtaM=10L,verbose=TRUE)
+  proc.time()
+
+
 
   ##
+
+  proc.time()
+  tmp  <- gibbsScan(wtab,om,nkeep=1L,alphaEta=10L,alphaLambda=0.1,
+		    etaCols=150L,lambdaSize=100L,
+		    verbose=TRUE)
+  proc.time()
+
+
 
   res4 <- gibbsScan(wtab,om)
 
@@ -925,6 +1026,10 @@ values for small r.
   res7 <- update(res6,auxEtaM=0L,auxLambdaM=0L)
   res8 <- update(res7,auxEtaM=5L,auxLambdaM=5L)
   res9 <- update(res8,auxEtaM=0L,auxLambdaM=0L)
+
+
+  sapply(ls(pat="^res"),function(x) sapply(get(x),function(y) y$logpost))
+
   ## this matches up with abbreviated version implemented in gibbsScan
   sum(dpois(wtab$tab[wtab$data.index,],
 	    with(res4[[1]],(t(eta)%*%om)[dataToEta,] * lambda[dataToLambda]),
