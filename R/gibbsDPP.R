@@ -30,9 +30,8 @@
 ##'     will result in termination with an error)
 ##' @param lambdaSize 
 ##'dprior prior value for draws of eta
-##' @param dprior when calling \code{gibbsDPP} same as
-##'   \code{dpriors[1]} when calling \code{gibbsScan}
-##' @param lambdaShape base distribution prior shape 
+##' @param dprior symmetric Dirichlet prior value 
+##' @param lambdaShape base gamma distribution prior shape 
 ##' @param lambdaRate base distribution prior rate
 ##' @param ijvals \code{0L} by default, but for splitting and merging
 ##'     a value of 2 is needed. Users should not usually change the
@@ -126,16 +125,6 @@ gibbsDPP <- function(
 ##'     to do.
 ##' @param nthin how many iterations per saved value
 ##' @param nburn discard this many iterations before saving any values
-##' @param dpriors The default value is \code{c(1.0,1.0)}. A smaller
-##'     value for \code{dpriors[1]} causes draws from the prior for
-##'     \code{eta} to be overdispersed. A larger value for
-##'     \code{dpriors[2]} causes posterior samples of \code{eta} to
-##'     shrink towards equality. Non-default value can be used to
-##'     influence the behavior of the sampler. The computations of the
-##'     posterior do not account for non-default values of
-##'     \code{dpriors} and should be ignored when non-default values
-##'     are used.
-##' 
 ##' @param keep vector of elements of the result in each iteration to
 ##'   retain or a function called with \code{pass}, the intermediate results, 
 ##'
@@ -144,6 +133,7 @@ gibbsDPP <- function(
 ##'     value. Otherwise the first two elemenbts are rthe shape and
 ##'     rate parameters of Gamma prior for \code{alphaEta}.
 ##' @param abLambda akin to \code{abEta}
+##' @param niter.tune how many cycles of tuning for each gibbs scan
 ##'
 ##' @importFrom stats rbeta rgamma dgamma runif
 ##' @export
@@ -174,30 +164,6 @@ gibbsScan <- function(wtab,
 		      ...){
   ## define helper functions:
 
-  ## JN and Liue et al have this as the prior
-  logPriorC <-
-    function(etaN,alpha){
-      if (alpha==0.0) return( 0.0 )
-      n <- sum(etaN)
-      length(etaN)*log(alpha) +
-        sum(lgamma(etaN)) -
-        sum(log(alpha+0:(n-1)))
-    }
-
-  ## Antoniak has this as the prior
-  logPriorAnt <- function(etaN,alpha){
-    m <- table(etaN)
-    i <- unique(sort(etaN))
-    stopifnot(i>0L)
-    n <- sum(i*m)
-    num <- lfactorial( n ) + sum(m * log(alpha))
-    denom <- 
-      sum( m *log(i) ) + sum(lfactorial(m)) +
-      sum( log(alpha + 1:n - 1) )
-    num - denom
-  }
-
-
   ## Escobar and West, Page 10  (Chapter in Dey et al, 2012)
   ralpha <- function(alpha,a,b,Istar,I){
     eta <- rbeta(1,alpha+1,I)
@@ -207,47 +173,6 @@ gibbsScan <- function(wtab,
     rgamma(1,shape+plus1, rate = rate)
   }
   
-## revise to use deviance
-  logpost <- function(tab,di,om,eta,etaN,dataToEta,etaM,alpha,
-                      lambda,lambdaN,dataToLambda,
-                      lambdaM,alphaLambda){
-    ## multinomial
-    etaN <- etaN[1:etaM]
-    eta <- eta[, 1:etaM, drop = FALSE]
-    lambdaN <- lambdaN[1:lambdaM]
-    lambda <- lambda[1:lambdaM]
-    ## data by Eta by Lambda sums
-    iel <- di * (etaM * lambdaM) + dataToEta * lambdaM + dataToLambda
-    uiel <- unique(iel)
-    ui <- uiel %/% (etaM * lambdaM)
-    ue <- (uiel %/% lambdaM) %% etaM
-    ul <- (uiel %% lambdaM)
-    uind <- match(iel, uiel)
-    iel.sums <- tabulate(uind)
-    ## data by Eta sums
-    uie <- ui * etaM + ue
-    uuie <- unique(uie)
-    uuind <- match(uie, uuie)
-    uui <- uuie%/%etaM
-    uue <-   uuie %% etaM
-    ie.sums <- tapply(iel.sums, uuind, FUN=sum)
-
-    marglik <-
-      marglogpost(eta[, 1L+uue, drop = FALSE],
-                  om,tab[ 1L+uui, , drop = FALSE])
-    margliksum <- sum(marglik * ie.sums )
-    ## Equations 6 and 10 Jain and Neal, 2007 yield 
-    logPriEta <- logPriorC(etaN,alphaEta)+etaM*lgamma(nrow(om))
-    logPriLambda <- logPriorC( lambdaN, alphaLambda ) # + lambdaM*log(1.0)
-    ## rho
-    r <- rowSums(tab)
-    p <- rowSums(t(om)) %*% eta
-    logprp <- 
-        mapply(logprobp, #( r.elt, p.elt, lambda.elt)
-               r[ 1L+ui ], p[ 1L+ue ], lambda[ 1L+ul ] )
-    logprho <- sum( iel.sums * logprp )
-    c(multinom=margliksum, n.obs=logprho,eta=logPriEta, lambda=logPriLambda)
-  }
 
   keep.default <-
     function(pass, log.posterior, i, nkeep, keep){
@@ -262,7 +187,7 @@ gibbsScan <- function(wtab,
                 lambdaM = lambdaM,
                 alphaEta = alphaEta,
                 alphaLambda = alphaLambda,
-                logpost = log.posterior
+                logLik = log.lik
                 ))[ keep ]
 }
   
@@ -403,22 +328,10 @@ gibbsScan <- function(wtab,
     }
     
 
-    log.posterior <- sparm[["logLik"]] - sum(wtab[["n"]]*lfactorial(wtab[["tab"]]))
-    
-    ## log.posterior <-
-    ##   with(pass2,
-    ##        c(logpost(
-    ##          tab, di, om, eta, etaN, dataToEta, etaM, alphaEta,
-    ##          lambda, lambdaN, dataToLambda,
-    ##          lambdaM, alphaLambda),
-    ##          alpha.eta = log.dalphaEta, alpha.lambda = log.dalphaLambda))
-     
-    keepers[[ i ]] <- keep.fun(pass2, log.posterior, i,nkeep,keep)             
-    
-
-
+    log.lik <- sparm[["logLik"]] - sum(wtab[["n"]]*lfactorial(wtab[["tab"]]))
+         
+    keepers[[ i ]] <- keep.fun(pass2, log.lik, i,nkeep,keep)             
   }
-  
   attr(keepers,"call") <- mc
   class(keepers) <- "ctScan"
   keepers
@@ -434,7 +347,8 @@ gibbsScan <- function(wtab,
 update.ctScan <- function(object, elt = length(object), ...){
   mc <- match.call()
   nameOnly <- c("eta","etaN","dataToEta","etaM","alphaEta",
-                "lambda","lambdaN","dataToLambda","lambdaM","alphaLambda")
+                "lambda","lambdaN","dataToLambda","lambdaM","alphaLambda",
+                "dprior","lambdaShape","lambdaRate" )
   objcall <- attr(object,"call")
   newparms <- list(...)
   newnames <- names(newparms)
