@@ -1160,6 +1160,31 @@ values for small r.
 #+end_src
 
 
+** cpp
+
+#+begin_src cpp :noweb yes :tangle src/ct.cpp
+  <<arma-headers>>
+  <<rdirich>>
+  <<logprob_Rplus>>
+  <<logprobMulti>>
+  <<newIndex>>
+  <<rkReject>>
+  <<rlamGivenR>>
+  <<updateXX>>
+  <<auxGibbs>>
+  <<rmultnm>>
+  <<rN0GivenN1>>
+  <<sampleParms>>
+#+end_src
+
+#+begin_src R :session *R:cellTypeCompositions*
+  Rcpp::sourceCpp("src/ct.cpp")
+  "done"
+#+end_src
+
+#+RESULTS:
+: done
+
 * tuneup
 
 #+name: sampleParms
