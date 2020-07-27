@@ -1013,7 +1013,7 @@ values for small r.
 
   res4 <- gibbsScan(wtab,om)
 
-  res5 <- gibbsScan(wtab,om,nkeep=5L,alphaLambda=0.1,abLambda=c(0.1,50.0),verbose=TRUE)
+  res5 <- gibbsScan(wtab,om,nkeep=5L,nburn=20L,alphaLambda=0.1,abLambda=c(0.1,50.0),verbose=TRUE)
 
   with(res5[[5]],cbind(lambda,lambdaN))
 
@@ -1303,75 +1303,10 @@ values for small r.
 
 * scratch
 
-#+begin_src R :noweb yes
-  code.string  <-
-    '
-    <<arma-headers>>
-
-    // [[Rcpp::export]]
-    arma::mat XX(arma::mat Y, arma::vec Z ){
-    arma::mat X2 = Y.each_col() % Z;
-    return X2;
-    }'
-
-  Rcpp::sourceCpp( code=code.string)
-
-  XX(diag(2)+1,1:2)
-#+end_src
-
-
-#+begin_src R :noweb yes
-  code.string  <-
-    '
-   <<arma-headers>>
-  // [[Rcpp::export]]
-  arma::mat XX(arma::mat om, arma::mat eta, arma::vec Z ){
-  arma::mat lambdaRhoComp = trans((1.0 - sum(om,1L)) % eta.each_col());
-  lambdaRhoComp.each_col() %= Z;
-    return lambdaRhoComp;
-    }'
-
-  Rcpp::sourceCpp( code=code.string)
-
-  XX((diag(2)+1)/4, prop.table(matrix(1:6,nr=2),2),c(0.3,0.5,0.8)) 
-
+#+begin_src R :session *R:cellTypeCompositions*
+  library(cellTypeCompositions,lib="../cellTypeCompositions.Rcheck")
 
 #+end_src
-
-#+begin_src R :noweb yes
-    code.string  <-
-      '
-  <<arma-headers>>
-  // [[Rcpp::export]]
-  arma::mat XX(arma::mat om, arma::ivec Z ){
-  om.each_col() += conv_to<vec>::from(Z);
-  return om;
-  }'
-
-    Rcpp::sourceCpp( code=code.string)
-
-    XX((diag(2)+1)/4, 1:2)
-
-
-#+end_src
-
-#+begin_src R :noweb yes
-    code.string  <-
-      '
-  <<arma-headers>>
-  // [[Rcpp::export]]
-  arma::mat XX(arma::mat om){
-  om.each_row() /= sum(om,0L);
-  return om;
-  }'
-
-    Rcpp::sourceCpp( code=code.string)
-
-    XX((diag(2)+1)/4)
-
-
-#+end_src
-
 
 
   
