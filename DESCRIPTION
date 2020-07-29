@@ -1,6 +1,6 @@
 Package: cellTypeCompositions
-Date: 2020-01-10
-Version: 0.1.0
+Date: 2020-07-28
+Version: 0.1.2
 License: GPL (>= 2)                          
 Description: Estimate cell type compositions from a table of clone
       by cell type counts. Functions are provided for exploring the cell

@@ -37,11 +37,16 @@
 ##'     a value of 2 is needed. Users should not usually change the
 ##'     default.
 ##' @param ... currently unused
+##' 
 ##' @return list with elements \code{eta}, \code{etaN}, \code{etaM},
-##'     and \code{dataToEta} which are updates to the correspondingly
-##'     named inputs for \code{gibbsDPP} and a list of two elements,
-##'     \code{last} and \code{launch}, given the last two such lists
-##'     for \code{gibbsCan}
+##'     \code{lambda}, \code{lambdaN}, \code{lambdaM}, and
+##'     \code{dataToEta} and \code{dataToLambda} which are updates to
+##'     the correspondingly named inputs for \code{gibbsDPP} and a
+##'     list of lists of such elements for \code{gibbsScan}. The
+##'     element \code{logLik} is the loglikelihood for \code{lambda}
+##'     and \code{eta} conditioning on the values of all other
+##'     parameters.
+##'
 ##' @export
 ##' @author Charles Berry
 gibbsDPP <- function(
@@ -187,7 +192,7 @@ gibbsScan <- function(wtab,
                 lambdaM = lambdaM,
                 alphaEta = alphaEta,
                 alphaLambda = alphaLambda,
-                logLik = log.lik
+                logLik = log.posterior
                 ))[ keep ]
 }
   
@@ -347,8 +352,7 @@ gibbsScan <- function(wtab,
 update.ctScan <- function(object, elt = length(object), ...){
   mc <- match.call()
   nameOnly <- c("eta","etaN","dataToEta","etaM","alphaEta",
-                "lambda","lambdaN","dataToLambda","lambdaM","alphaLambda",
-                "dprior","lambdaShape","lambdaRate" )
+                "lambda","lambdaN","dataToLambda","lambdaM","alphaLambda")
   objcall <- attr(object,"call")
   newparms <- list(...)
   newnames <- names(newparms)

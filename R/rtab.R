@@ -6,7 +6,8 @@
 ##' @param scan the object produced by \code{\link{gibbsScan}}
 ##' @param uop a filtration matrix such as made by \code{\link{exOGS}}
 ##' @param elt which element of the scan to usein sampling.
-##' @return
+##' @return table of counts 
+##' @importFrom stats rpois
 ##' @export
 ##' @author Charles Berry
   rtab <- function(scan, uop, elt=length(scan)){
