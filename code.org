@@ -328,10 +328,12 @@ Resizing is rather time consuming.
     type proportions.
 
     Author: Charles C. Berry
-    Date: 24-01-2020
+    Date:
+    28-07-2020
+    24-01-2020
     10-01-2020
     22-04-2019
-    16-060-2019
+    16-06-2019
   ,*/
 
   /* assume
@@ -362,7 +364,7 @@ Resizing is rather time consuming.
     // pull std::vector<double> from R list
     // this is achieved through an implicit
     // call to Rcpp::as
-  
+
     int etaCols = eta.n_cols;
     int lambdaSize = lambda.size();
     int J = om.n_rows;
@@ -378,9 +380,9 @@ Resizing is rather time consuming.
     for (int i=ijvals;
 	 i<ndat && etaM+auxM <= etaCols && lambdaM+auxLambdaM <= lambdaSize;
 	 i++){
-  
+
       if (verbose>1L) Rprintf("i = %d\n",i);
-    
+
       int di2e = diToEta[ i ];
       double etaN1; // singletons need one less 
       if (di2e >= 0L && etaN( di2e ) == 1.0){
@@ -391,7 +393,7 @@ Resizing is rather time consuming.
 	{ etaN1 = 0; 
 	  if (di2e>=0L) etaN( di2e )--;
 	}
-    
+
       int di2lam = diToLambda[ i ];
       double lambdaN1; // singletons need one less 
       if (di2lam >= 0L && lambdaN( di2lam ) == 1.0){
@@ -402,30 +404,30 @@ Resizing is rather time consuming.
 	{ lambdaN1 = 0; 
 	  if (di2lam>=0L) lambdaN( di2lam )--;
 	}
-    
+
       // sample auxM from prior
       for (int j = 0; j < auxM-etaN1; j++){
 	eta.col(j + etaM ) = rdirich(J, dprior);
 	etaN( j+etaM ) = alpha/auxM;
       }
-    
+
       // rho and logprob
       // initially use lambdaVal = NA_REAL;
       double lambdaVal = (di2lam < 0 ) ? NA_REAL : lambda( di2lam );
-    
+
       irowvec tr = tab.row(di( i ));
       int newind =
 	newIndex(logprob( tr, om, eta, etaN,
 			  etaM + auxM - (int) etaN1, lambdaVal));
-    
+
       // update-eta
-    
-    
+
+
       etaCols = updateXX(  newind, i, eta, etaN, diToEta, etaN1, etaM,
 		 decN, incNnew, incNold, auxM, verbose);
-    
+
       // update-lambda
-    
+
       // sample lambdaM from posterior
       double rhosum = (double) accu( trans(eta.col(newind))*om );
       int tabsum = arma::sum( tr );
@@ -434,14 +436,14 @@ Resizing is rather time consuming.
 	  rlamGivenR( rhosum, lambdaShape, lambdaRate, tabsum);
 	lambdaN( j+lambdaM ) = alphaLambda/auxLambdaM;
       }
-    
+
       newind = newIndex(logprob_p( tabsum, rhosum,
 				   lambda.head(lambdaM+auxLambdaM) ) +
 			log( lambdaN.head( lambdaM + auxLambdaM)));
-    
+
       lambdaSize = updateXX(  newind, i, lambda, lambdaN, diToLambda, lambdaN1, lambdaM,
 		 decLambdaN, incLambdaNnew, incLambdaNold, auxLambdaM, verbose);
-    
+
     }
     if (verbose)  {
       Rprintf("delete Eta= %d add = %d use existing = %d ",
@@ -449,7 +451,7 @@ Resizing is rather time consuming.
       Rprintf("delete Lambda= %d add = %d use existing = %d\n",
 	      decLambdaN, incLambdaNnew, incLambdaNold);
     }
-    
+
     // return an R list; this is achieved
     // through an implicit call to Rcpp::wrap
     return List::create(_["eta"] = eta,
@@ -1308,5 +1310,39 @@ values for small r.
 
 #+end_src
 
+#+name: xlogy
+#+begin_src cpp
+  // [[Rcpp::export]]
+  double xlogy(ivec x, vec y){
+    int n = x.size();
+    double totl = 0.0;
+    for (int i = 0L; i<n; i++)
+      if (x(i)!=0) totl+= (double) x(i) * log(y(i));
+    return totl;
+  }
+  // [[Rcpp::export]]
+  double xlogy2(ivec x, vec y){
+    int n = x.size();
+    double totl = 0.0;
+    for (int i = 0L; i<n; i++)
+      totl+= (double) x(i) * log(y(i));
+    return totl;
+  }
 
+#+end_src
+
+
+#+begin_src R :noweb yes
+  Rcpp::sourceCpp(code=
+		    '
+  <<arma-headers>>
+  <<xlogy>>
+  ')
+
+
+  x <- rep(0:1,c(1600,400))
+  y <- rexp(2000)
+
+  microbenchmark::microbenchmark(xlogy(x,y),xlogy2(x,y))
+#+end_src
   
