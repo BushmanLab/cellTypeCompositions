@@ -5,17 +5,20 @@
 ##' @title rtab
 ##' @param scan the object produced by \code{\link{gibbsScan}}
 ##' @param uop a filtration matrix such as made by \code{\link{exOGS}}
-##' @param elt which element of the scan to usein sampling.
+##' @param elt which element of the scan to use in sampling.
+##' @param tol lower limit on probability of observing a clone
 ##' @return table of counts 
 ##' @importFrom stats rpois
 ##' @export
 ##' @author Charles Berry
-  rtab <- function(scan, uop, elt=length(scan)){
+  rtab <- function(scan, uop, elt=length(scan),tol=1e-3){
     elt <- scan[[elt]]
     etaLambdaN <- table(elt[["dataToEta"]], elt[["dataToLambda"]])
     rho <- t(elt[["eta"]])%*%uop
     rhoPlusLambda <- rowSums(rho)%o%elt[["lambda"]]
     is.etaLambda <- etaLambdaN != 0
+    if( any(rhoPlusLambda[is.etaLambda] < tol) )
+        stop("probability of observing clone(s) < tol")
     etaLambdaN0 <-
       rnbinom(sum( is.etaLambda ),
 	      etaLambdaN[is.etaLambda],
