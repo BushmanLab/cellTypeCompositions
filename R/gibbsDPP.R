@@ -216,9 +216,7 @@ gibbsScan <- function(wtab,
   stopifnot(all(abLambda>0), length(abLambda)==0 || length(abLambda==2))
   if (ijvals!=0){
     if (etaM!=ijvals) stop("ijvals != etaM or 0L is not permitted")
-    if (ncol(eta)!=ijvals)
-        warning("ijvals !=0 && ncol(eta) != ijvals is usually an error")
-    if (is.null(dataToEta) || any(dataToEta[1:ijvals]<1) )
+      if (is.null(dataToEta) || any(dataToEta[1:ijvals]<1) )
       stop("dataToEta[1:ijvals] must be given as positive integers")
   } else {
     if (auxEtaM == 0L) warning("auxEtaM == 0 & ijvals == 0 is usually a mistake")
