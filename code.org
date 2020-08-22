@@ -125,6 +125,40 @@
 
 #+end_src
 
+
+#+name: intFG
+#+begin_src cpp
+  #define LOWLIM 4
+  inline double piy(double y, double rho, double alpha, double beta){
+    double piwhy =  exp(log_pi_Y_approx(y, (double) LOWLIM - 0.5,  rho, alpha, beta));
+    for (int i = 0; i<LOWLIM; i++){
+      piwhy +=
+	exp( log_pi_ky( i, y, rho, alpha, beta));
+    }
+    return piwhy;
+  }
+#+end_src
+
+#+name: piy
+#+begin_src cpp
+
+  inline double log_pi_Y_approx(double y, double lowlim, double rho, double alpha, double beta){
+    return log(beta) * alpha - lgamma(alpha) + log(rho)*(y-1.0)
+      - lgamma(y+1.0) + lgamma( alpha + y ) - log (alpha + y - 1.0)
+      - log( beta + rho * (lowlim + 1.0)) * (alpha + y - 1.0);
+  }
+#+end_src
+
+#+name: piky
+#+begin_src cpp
+  inline double log_pi_ky(int k, double y,  double rho, double alpha, double beta){
+    return log(beta)*alpha - lgamma(alpha) +
+      log(rho) * y - lgamma(y+1) + lgamma(alpha+y) -
+      log(beta+rho*(((double) k + 1.0))) * (alpha+y);
+  }
+
+#+end_src
+
 #+name: rkReject
 #+begin_src cpp
   #define INDEF_INT( x )   -pow((beta+rho*(1+x)),-(alpha+r-1))/(rho*(alpha+r-1))
@@ -933,6 +967,79 @@ values for small r.
 
 ** int FG
 
+
+#+begin_src R :noweb yes
+  Rcpp::sourceCpp(code="
+  <<arma-headers>>
+  <<piy>>
+  <<piky>>
+  <<intFG>>
+  // [[Rcpp::export]]
+  double intFG(double y, double rho, double alpha, double beta){
+  return piy(y, rho, alpha, beta);
+  }
+  ")
+
+  tmp <- (pi.ky(0,1:100,.5,1,.1))+
+    (pi.ky(1,1:100,.5,1,.1))+
+    (pi.ky(2,1:100,.5,1,.1))+
+    (pi.ky(3,1:100,.5,1,.1))+
+    (int.pi.ky(3.5, 1:100, .5, 1,.1))
+
+  tmp2  <- sapply(1:100,function(x) intFG(x,.5,1,.1))
+
+  all.equal(tmp,tmp2)
+
+#+end_src
+
+prob k
+
+#+begin_src R :noweb yes
+  Rcpp::sourceCpp(code=
+		    "
+  <<arma-headers>>
+  <<piky>>
+  // [[Rcpp::export]]
+  double piky(int k, double y, double rho, double alpha, double beta){
+   return exp(log_pi_ky(k,y,rho,alpha,beta));
+  }")
+
+  pi.ky2 <- function(k,y,rho,alpha,beta){
+      lres  <-log(beta)*alpha -
+	lgamma(alpha) +
+	log(rho)*y - lfactorial(y) +
+	lgamma(alpha+y) -
+	log(beta+rho*(k+1))*(alpha+y)
+      exp(lres)
+  }
+
+  all.equal(pi.ky2(0:10,1,.5,1,.1),
+	    sapply(0:10,function(x) piky(x,1.0,0.5,1.0,0.1)))
+
+#+end_src
+
+Approximate integral
+#+begin_src R :noweb yes
+  Rcpp::sourceCpp(code=
+		   "
+  <<arma-headers>>
+  <<piy>>
+  // [[Rcpp::export]]
+  double logpiy(double y, double lowlim, double rho, double alpha, double beta){
+  return log_pi_Y_approx(y, lowlim, rho, alpha, beta);}
+  ")
+
+  log.int.pi.ky <- function(k,y,rho,alpha,beta)
+    log(beta)*alpha - lgamma(alpha) + log(rho)*(y-1) - lfactorial(y) +
+      lgamma(alpha+y)-log(alpha+y-1) -
+      log( beta + rho*(k+1) )*(alpha+y-1)
+
+  all.equal(
+    log.int.pi.ky(-0.5, 1:10, .5, 1,.1),
+    sapply(1:10, function(x) logpiy(x,-0.5,0.5,1.0,0.1)))
+
+#+end_src
+
 #+begin_src R
 
   pi.y.giv <- function(y,lambda,rho,alpha,beta)
@@ -1010,6 +1117,7 @@ values for small r.
   intFG(1,.5,1,.1)
   sum(pi.ky(0:1000,1,.5,1,.1))
 
+  ## this approximates the sum from k to Inf
   int.pi.ky <- function(k,y,rho,alpha,beta)
     beta^alpha/ gamma(alpha) * rho^(y-1) / factorial(y) *
       gamma(alpha+y)/(alpha+y-1) /
@@ -1033,7 +1141,7 @@ values for small r.
   all.equal(int.pi.ky(9.5, 1, .5, 1,.1),
 	    integrate(function(x) pi.ky(x,1,.5,1,.1),10-0.5,Inf)$value)
 
-  ## should this sum < one? No. it is not the sum over k
+  ## should this sum < one? No. it is not the sum over k, but an approx
   int.pi.ky(-0.5, 1:10, .5, 1,.1)
 
   ## this comes close
@@ -1043,9 +1151,6 @@ values for small r.
       sum(pi.ky(3,1:100,.5,1,.1))+
     sum(int.pi.ky(3.5, 1:100, .5, 1,.1))
 
-
-
-
   log.int.pi.ky <- function(k,y,rho,alpha,beta)
     log(beta)*alpha - lgamma(alpha) + log(rho)*(y-1) - lfactorial(y) +
       lgamma(alpha+y)-log(alpha+y-1) -
@@ -1053,10 +1158,20 @@ values for small r.
 
   log.int.pi.ky(-0.5, 1:10, .5, 1,.1)
 
-  log.int.pi.ky2 <- function(k,y,rho,alpha,beta)
-    log(beta)*alpha - lgamma(alpha) +log( rho)*(y-1) - lfactorial(y) +
-      lgamma(alpha+y)-log(alpha+y-1) -
-      log(beta + rho*(k+1))*(alpha+y-1))
+  ## compare approx to numerical intgral via integrate
+  tmp <- (pi.ky(0,1:100,.5,1,.1))+
+    (pi.ky(1,1:100,.5,1,.1))+
+    (pi.ky(2,1:100,.5,1,.1))+
+    (pi.ky(3,1:100,.5,1,.1))+
+    (int.pi.ky(3.5, 1:100, .5, 1,.1))
+
+  tmp2  <- sapply(1:100,function(x) intFG(x,.5,1,.1,tol=1e-14))
+
+  ## this shows breakdown in integrate for very small values - viz the
+  ## nearly linear plot breaks at less than 1e-8. Using bigger tol moves
+  ## the breakpoint to larger values
+
+  plot(tmp,tmp2,log='xy')
 #+end_src
 
 ** sampleParms
