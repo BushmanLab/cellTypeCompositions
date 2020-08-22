@@ -931,6 +931,134 @@ values for small r.
 #+RESULTS:
 : PASS
 
+** int FG
+
+#+begin_src R
+
+  pi.y.giv <- function(y,lambda,rho,alpha,beta)
+    dpois(y,rho*lambda)/ppois(0,rho*lambda,lower.tail=FALSE)*dgamma(lambda,alpha,rate=beta)
+
+  pi.y.giv2 <- function(y,lambda,rho,alpha,beta)
+    exp(-rho*lambda)*(rho*lambda)^y/(1-exp(-rho*lambda))*beta^alpha/gamma(alpha)*lambda^(alpha-1)*exp(-lambda*beta)/factorial(y)
+
+  pi.y.giv3 <- function(lambda,k,y,rho,alpha,beta)
+    beta^alpha /
+      gamma(alpha) *
+      lambda^(alpha-1) *
+      (rho*lambda)^y *
+      exp(-rho*lambda) *
+      sum(exp(-(k)*rho*lambda)) *
+      exp(-lambda*beta)/factorial(y)
+
+
+
+  pi.y.giv(1,.5,.5,.1,.1)
+  pi.y.giv2(1,.5,.5,.1,.1)
+  sum(pi.y.giv3(.5,0:100,1,.5,.1,.1))
+
+  intFG <- function(y,rho,alpha,beta,tol=1e-5){
+    fun <- function(x) dpois(y,rho*x)/ppois(0,rho*x,lower.tail=FALSE)*dgamma(x,alpha,rate=beta)
+    res1 <- integrate(fun,0,10,rel.tol=tol)
+    res2 <- integrate(fun,10,Inf,rel.tol=tol)
+    res1$value+res2$value
+  }
+
+  intFG(1,.1,.1,.01)
+
+  intFG(10,.1,.1,.01)
+  sum(sapply(1:1000,function(x) intFG(x,.1,.1,.1)))
+  debugonce(intFG)
+  intFG(50,.1,.1,.01)
+  intFG(50,.1,.1,.01,1e-15)
+
+  pi.lky <- function(lambda,k,y,rho,alpha,beta)
+    beta^alpha / gamma(alpha) * (rho*lambda)^y * lambda^(alpha-1)*exp(-lambda*(beta+rho*(k+1)))/factorial(y)
+
+  pi.lky(.5,0,1,.5,.1,.1)
+  pi.y.giv3(.5,0,1,.5,.1,.1)
+
+
+  sum(pi.lky(0.5,1,1:100,.5,1,.1))
+
+  pi.lky2 <- function(x,k,y,rho,alpha,beta)
+    dpois(y,rho*x*(k+1))*dgamma(x,alpha,rate=beta)
+
+
+  pi.ky <- function(k,y,rho,alpha,beta)
+    beta^alpha /
+      gamma(alpha) *
+      rho^y/factorial(y) *
+      gamma(alpha+y) /
+      (beta+rho*(k+1))^(alpha+y)
+
+  all.equal(
+    integrate(function(x) pi.lky(x,0,1,.5,.1,.1),0,Inf)$value,
+    pi.ky(0,1,.5,.1,.1),
+    tol=1e-5)
+
+  ## more accurate version
+  pi.ky2 <- function(k,y,rho,alpha,beta){
+    lres  <-log(beta)*alpha -
+      lgamma(alpha) +
+      log(rho)*y - lfactorial(y) +
+      lgamma(alpha+y) -
+      log(beta+rho*(k+1))*(alpha+y)
+    exp(lres)
+  }
+
+
+  intFG(1,.5,1,.1)
+  sum(pi.ky(0:1000,1,.5,1,.1))
+
+  int.pi.ky <- function(k,y,rho,alpha,beta)
+    beta^alpha/ gamma(alpha) * rho^(y-1) / factorial(y) *
+      gamma(alpha+y)/(alpha+y-1) /
+      (beta + rho*(k+1))^(alpha+y-1)
+
+  int.pi.ky(-0.5, 1, .5, 1,.1)
+
+  sum(sapply(1:100,function(x) sum(pi.ky(0:100,x,.5,1,.1))))
+
+
+  int.pi.ky(9.5, 1, .5, 1,.1)-int.pi.ky(999.5,1,.5,1,.1)
+
+  sum(pi.ky(10:1000,1,.5,1,.1))
+
+  all.equal(int.pi.ky(-0.5, 1, .5, 1,.1),
+	    integrate(function(x) pi.ky(x,1,.5,1,.1),-0.5,Inf)$value)
+
+  all.equal(int.pi.ky(-0.5, 2, .5, 1,.1),
+	    integrate(function(x) pi.ky(x,2,.5,1,.1),-0.5,Inf)$value)
+
+  all.equal(int.pi.ky(9.5, 1, .5, 1,.1),
+	    integrate(function(x) pi.ky(x,1,.5,1,.1),10-0.5,Inf)$value)
+
+  ## should this sum < one? No. it is not the sum over k
+  int.pi.ky(-0.5, 1:10, .5, 1,.1)
+
+  ## this comes close
+  sum(pi.ky(0,1:100,.5,1,.1))+
+    sum(pi.ky(1,1:100,.5,1,.1))+
+    sum(pi.ky(2,1:100,.5,1,.1))+
+      sum(pi.ky(3,1:100,.5,1,.1))+
+    sum(int.pi.ky(3.5, 1:100, .5, 1,.1))
+
+
+
+
+  log.int.pi.ky <- function(k,y,rho,alpha,beta)
+    log(beta)*alpha - lgamma(alpha) + log(rho)*(y-1) - lfactorial(y) +
+      lgamma(alpha+y)-log(alpha+y-1) -
+      log( beta + rho*(k+1) )*(alpha+y-1)
+
+  log.int.pi.ky(-0.5, 1:10, .5, 1,.1)
+
+  log.int.pi.ky2 <- function(k,y,rho,alpha,beta)
+    log(beta)*alpha - lgamma(alpha) +log( rho)*(y-1) - lfactorial(y) +
+      lgamma(alpha+y)-log(alpha+y-1) -
+      log(beta + rho*(k+1))*(alpha+y-1))
+#+end_src
+
 ** sampleParms
 
 #+begin_src cpp :noweb yes :tangle nobuild/sampleParms.cpp
