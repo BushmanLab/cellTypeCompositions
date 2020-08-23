@@ -218,10 +218,8 @@ gibbsScan <- function(wtab,
     if (etaM!=ijvals) stop("ijvals != etaM or 0L is not permitted")
       if (is.null(dataToEta) || any(dataToEta[1:ijvals]<1) )
       stop("dataToEta[1:ijvals] must be given as positive integers")
-  } else {
-    if (auxEtaM == 0L) warning("auxEtaM == 0 & ijvals == 0 is usually a mistake")
   }
-
+  
   if (auxEtaM != 0L && etaM + auxEtaM > ncol(eta)){
     ## need to pad eta and etaN
     padby  <- max(etaM+auxEtaM, etaCols) - ncol(eta)
