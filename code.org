@@ -125,10 +125,30 @@
 
 #+end_src
 
+#+name: logIntFG
+#+begin_src cpp :noweb yes
+  #define LOWLIM 4
+  <<piy>>
+  <<piky>>
+
+  inline double log_piy(double y, double rho, double alpha, double beta){
+    double log_pi0 = log_pi_ky( 0, y, rho, alpha, beta);
+    double pitotal = 1.0 +
+      exp(log_pi_Y_approx(y, (double) LOWLIM - 0.5,  rho, alpha, beta) - log_pi0);
+    for (int i = 1; i<LOWLIM; i++){
+      pitotal +=
+	exp( log_pi_ky( i, y, rho, alpha, beta) - log_pi0 );
+    }
+    return log_pi0 + log(pitotal);
+  }
+#+end_src
+
+
 
 #+name: intFG
 #+begin_src cpp
   #define LOWLIM 4
+
   inline double piy(double y, double rho, double alpha, double beta){
     double piwhy =  exp(log_pi_Y_approx(y, (double) LOWLIM - 0.5,  rho, alpha, beta));
     for (int i = 0; i<LOWLIM; i++){
@@ -142,9 +162,11 @@
 #+name: piy
 #+begin_src cpp
 
+
+
   inline double log_pi_Y_approx(double y, double lowlim, double rho, double alpha, double beta){
     return log(beta) * alpha - lgamma(alpha) + log(rho)*(y-1.0)
-      - lgamma(y+1.0) + lgamma( alpha + y ) - log (alpha + y - 1.0)
+      - LOGFACTORIAL(y) + lgamma( alpha + y ) - log (alpha + y - 1.0)
       - log( beta + rho * (lowlim + 1.0)) * (alpha + y - 1.0);
   }
 #+end_src
@@ -153,7 +175,7 @@
 #+begin_src cpp
   inline double log_pi_ky(int k, double y,  double rho, double alpha, double beta){
     return log(beta)*alpha - lgamma(alpha) +
-      log(rho) * y - lgamma(y+1) + lgamma(alpha+y) -
+      log(rho) * y - LOGFACTORIAL(y) + lgamma(alpha+y) -
       log(beta+rho*(((double) k + 1.0))) * (alpha+y);
   }
 
@@ -238,7 +260,7 @@ Resizing is rather time consuming.
 		 arma::mat& XX,
 		 arma::rowvec& XXN,
 		 arma::ivec& diToXX,
-		 double XXN1,	// singleton flag
+		 int XXN1,	// singleton flag
 		 int& XXM,
 		 int& decXXN,  
 		 int& incXXNnew,
@@ -388,7 +410,7 @@ Resizing is rather time consuming.
 		int etaM = 0L,
 		int auxM = 5L, double alpha = 100.0,
 		int lambdaM = 0L,
-		int auxLambdaM = 5L, double alphaLambda = 5.0,
+		int auxLambdaM = 1L, double alphaLambda = 5.0,
 		int ijvals = 0L,
 		int verbose = 0L,
 		double dprior=1.0,
@@ -418,7 +440,7 @@ Resizing is rather time consuming.
       if (verbose>1L) Rprintf("i = %d\n",i);
 
       int di2e = diToEta[ i ];
-      double etaN1; // singletons need one less 
+      int etaN1; // singletons need one less 
       if (di2e >= 0L && etaN( di2e ) == 1.0){
 	etaN1 = 1;
 	etaN( di2e ) = alpha/auxM;
@@ -429,10 +451,10 @@ Resizing is rather time consuming.
 	}
 
       int di2lam = diToLambda[ i ];
-      double lambdaN1; // singletons need one less 
-      if (di2lam >= 0L && lambdaN( di2lam ) == 1.0){
-	lambdaN1 = 1.0;
-	lambdaN( di2lam ) = alphaLambda/auxLambdaM;
+      int lambdaN1; // singletons need one less 
+      if (di2lam >= 0 && lambdaN( di2lam ) == 1.0){
+	lambdaN1 = 1;
+	lambdaN( di2lam ) = alphaLambda;
       }
       else
 	{ lambdaN1 = 0; 
@@ -452,7 +474,7 @@ Resizing is rather time consuming.
       irowvec tr = tab.row(di( i ));
       int newind =
 	newIndex(logprob( tr, om, eta, etaN,
-			  etaM + auxM - (int) etaN1, lambdaVal));
+			  etaM + auxM - etaN1, lambdaVal));
 
       // update-eta
 
@@ -465,15 +487,21 @@ Resizing is rather time consuming.
       // sample lambdaM from posterior
       double rhosum = (double) accu( trans(eta.col(newind))*om );
       int tabsum = arma::sum( tr );
-      for (int j = 0; j < auxLambdaM-lambdaN1; j++){
-	lambda(j + lambdaM ) =
-	  rlamGivenR( rhosum, lambdaShape, lambdaRate, tabsum);
-	lambdaN( j+lambdaM ) = alphaLambda/auxLambdaM;
+      int lambdaElts = (auxLambdaM==0 || lambdaN1) ? lambdaM : lambdaM + 1;
+      arma::rowvec lambdaProbs =
+	logprob_p( tabsum, rhosum, lambda.head(lambdaElts) ) +
+	log( lambdaN.head( lambdaElts));
+
+      int intFGindx = lambdaN1 ? di2lam : lambdaM;
+      if (lambdaN1 || auxLambdaM){
+	lambdaProbs(intFGindx) =
+	  log_piy((double) tabsum , rhosum, lambdaShape, lambdaRate) + log(alphaLambda);
       }
 
-      newind = newIndex(logprob_p( tabsum, rhosum,
-				   lambda.head(lambdaM+auxLambdaM) ) +
-			log( lambdaN.head( lambdaM + auxLambdaM)));
+      newind = newIndex(lambdaProbs);
+
+      if (newind == intFGindx)
+	  lambda(newind) = rlamGivenR( rhosum, lambdaShape, lambdaRate, tabsum);
 
       lambdaSize = updateXX(  newind, i, lambda, lambdaN, diToLambda, lambdaN1, lambdaM,
 		 decLambdaN, incLambdaNnew, incLambdaNold, auxLambdaM, verbose);
@@ -716,7 +744,7 @@ Rcpp::sourceCpp("tempfilename.cpp") should work.
     arma::mat XX = xlist["XX"];
     arma::rowvec XXN = xlist["XXN"];
     arma::ivec diToXX = xlist["diToXX"];
-    double XXN1 = xlist["XXN1"];
+    int XXN1 = xlist["XXN1"];
     IntegerVector XXM = xlist["XXM"];
     IntegerVector decXXN = xlist["decXXN"];
     IntegerVector incXXNnew = xlist["incXXNnew"];
@@ -971,6 +999,7 @@ values for small r.
 #+begin_src R :noweb yes
   Rcpp::sourceCpp(code="
   <<arma-headers>>
+  #define LOGFACTORIAL(x) lgamma(x+1.0) 
   <<piy>>
   <<piky>>
   <<intFG>>
@@ -979,6 +1008,21 @@ values for small r.
   return piy(y, rho, alpha, beta);
   }
   ")
+
+
+  pi.ky <- function(k,y,rho,alpha,beta)
+      beta^alpha /
+	gamma(alpha) *
+	rho^y/factorial(y) *
+	gamma(alpha+y) /
+	(beta+rho*(k+1))^(alpha+y)
+  ## this approximates the sum from k to Inf
+  int.pi.ky <- function(k,y,rho,alpha,beta)
+    beta^alpha/ gamma(alpha) * rho^(y-1) / factorial(y) *
+      gamma(alpha+y)/(alpha+y-1) /
+      (beta + rho*(k+1))^(alpha+y-1)
+
+
 
   tmp <- (pi.ky(0,1:100,.5,1,.1))+
     (pi.ky(1,1:100,.5,1,.1))+
@@ -990,6 +1034,37 @@ values for small r.
 
   all.equal(tmp,tmp2)
 
+  ## kernel only
+
+  Rcpp::sourceCpp(code="
+  <<arma-headers>>
+  #define LOGFACTORIAL(x) 0.0 
+  <<piy>>
+  <<piky>>
+  <<intFG>>
+  // [[Rcpp::export]]
+  double intFG2(double y, double rho, double alpha, double beta){
+  return piy(y, rho, alpha, beta);
+  }
+  ")
+
+  tmp3  <- sapply(1:100,function(x) intFG2(x,.5,1,.1))
+  all.equal(tmp3/factorial(1:100),tmp2)
+
+
+  Rcpp::sourceCpp(code="
+  <<arma-headers>>
+  #define LOGFACTORIAL(x) lgamma(x+1.0) 
+  <<logIntFG>>
+  // [[Rcpp::export]]
+  double logIntFG(double y, double rho, double alpha, double beta){
+  return log_piy(y, rho, alpha, beta);
+  }
+  ")
+
+  tmp4  <- sapply(1:100,function(x) logIntFG(x,.5,1,.1))
+  all.equal(exp(tmp4),tmp2)
+
 #+end_src
 
 prob k
@@ -998,6 +1073,7 @@ prob k
   Rcpp::sourceCpp(code=
 		    "
   <<arma-headers>>
+  #define LOGFACTORIAL(x) lgamma(x+1.0) 
   <<piky>>
   // [[Rcpp::export]]
   double piky(int k, double y, double rho, double alpha, double beta){
@@ -1023,6 +1099,7 @@ Approximate integral
   Rcpp::sourceCpp(code=
 		   "
   <<arma-headers>>
+  #define LOGFACTORIAL(x) lgamma(x+1.0) 
   <<piy>>
   // [[Rcpp::export]]
   double logpiy(double y, double lowlim, double rho, double alpha, double beta){
@@ -1409,8 +1486,10 @@ Approximate integral
 
 #+begin_src cpp :noweb yes :tangle src/ct.cpp
   <<arma-headers>>
+  #define LOGFACTORIAL(x) 0.0 
   <<rdirich>>
   <<logprob_Rplus>>
+  <<logIntFG>>
   <<logprobMulti>>
   <<newIndex>>
   <<rkReject>>
