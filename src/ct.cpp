@@ -4,6 +4,7 @@ using namespace arma;
 // [[Rcpp::depends(RcppArmadillo)]]
 
 
+#define LOGFACTORIAL(x) 0.0 
 // uniform dirichlet random numbers
 
 inline vec rdirich( int n, double dprior=1.0 ){
@@ -51,6 +52,32 @@ inline arma::rowvec logprob_p( int r, double p, arma::rowvec lambda ){
   return result;
 }    
 
+#define LOWLIM 4
+
+
+
+inline double log_pi_Y_approx(double y, double lowlim, double rho, double alpha, double beta){
+  return log(beta) * alpha - lgamma(alpha) + log(rho)*(y-1.0)
+    - LOGFACTORIAL(y) + lgamma( alpha + y ) - log (alpha + y - 1.0)
+    - log( beta + rho * (lowlim + 1.0)) * (alpha + y - 1.0);
+}
+inline double log_pi_ky(int k, double y,  double rho, double alpha, double beta){
+  return log(beta)*alpha - lgamma(alpha) +
+    log(rho) * y - LOGFACTORIAL(y) + lgamma(alpha+y) -
+    log(beta+rho*(((double) k + 1.0))) * (alpha+y);
+}
+
+
+inline double log_piy(double y, double rho, double alpha, double beta){
+  double log_pi0 = log_pi_ky( 0, y, rho, alpha, beta);
+  double pitotal = 1.0 +
+    exp(log_pi_Y_approx(y, (double) LOWLIM - 0.5,  rho, alpha, beta) - log_pi0);
+  for (int i = 1; i<LOWLIM; i++){
+    pitotal +=
+      exp( log_pi_ky( i, y, rho, alpha, beta) - log_pi0 );
+  }
+  return log_pi0 + log(pitotal);
+}
 
 // log probability vector (sans multinomial coefficient)
 
@@ -159,7 +186,7 @@ int updateXX( int newind,
 	       arma::mat& XX,
 	       arma::rowvec& XXN,
 	       arma::ivec& diToXX,
-	       double XXN1,	// singleton flag
+	       int XXN1,	// singleton flag
 	       int& XXM,
 	       int& decXXN,  
 	       int& incXXNnew,
@@ -256,10 +283,12 @@ int updateXX( int newind,
   type proportions.
 
   Author: Charles C. Berry
-  Date: 24-01-2020
+  Date:
+  28-07-2020
+  24-01-2020
   10-01-2020
   22-04-2019
-  16-060-2019
+  16-06-2019
 */
 
 /* assume
@@ -280,7 +309,7 @@ List auxGibbs(arma::imat& tab, arma::ivec& di, arma::mat& om,
 	      int etaM = 0L,
 	      int auxM = 5L, double alpha = 100.0,
 	      int lambdaM = 0L,
-	      int auxLambdaM = 5L, double alphaLambda = 5.0,
+	      int auxLambdaM = 1L, double alphaLambda = 5.0,
 	      int ijvals = 0L,
 	      int verbose = 0L,
 	      double dprior=1.0,
@@ -307,10 +336,10 @@ List auxGibbs(arma::imat& tab, arma::ivec& di, arma::mat& om,
        i<ndat && etaM+auxM <= etaCols && lambdaM+auxLambdaM <= lambdaSize;
        i++){
 
-    if (verbose>1L) Rprintf("i = %d\n",i);
+    if (verbose>1L) Rprintf("i = %d",i);
 
     int di2e = diToEta[ i ];
-    double etaN1; // singletons need one less 
+    int etaN1; // singletons need one less 
     if (di2e >= 0L && etaN( di2e ) == 1.0){
       etaN1 = 1;
       etaN( di2e ) = alpha/auxM;
@@ -321,10 +350,10 @@ List auxGibbs(arma::imat& tab, arma::ivec& di, arma::mat& om,
       }
 
     int di2lam = diToLambda[ i ];
-    double lambdaN1; // singletons need one less 
-    if (di2lam >= 0L && lambdaN( di2lam ) == 1.0){
-      lambdaN1 = 1.0;
-      lambdaN( di2lam ) = alphaLambda/auxLambdaM;
+    int lambdaN1; // singletons need one less 
+    if (di2lam >= 0 && lambdaN( di2lam ) == 1.0){
+      lambdaN1 = 1;
+      lambdaN( di2lam ) = alphaLambda;
     }
     else
       { lambdaN1 = 0; 
@@ -344,10 +373,9 @@ List auxGibbs(arma::imat& tab, arma::ivec& di, arma::mat& om,
     irowvec tr = tab.row(di( i ));
     int newind =
       newIndex(logprob( tr, om, eta, etaN,
-			etaM + auxM - (int) etaN1, lambdaVal));
+			etaM + auxM - etaN1, lambdaVal));
 
     // update-eta
-
 
     etaCols = updateXX(  newind, i, eta, etaN, diToEta, etaN1, etaM,
 	       decN, incNnew, incNold, auxM, verbose);
@@ -357,19 +385,24 @@ List auxGibbs(arma::imat& tab, arma::ivec& di, arma::mat& om,
     // sample lambdaM from posterior
     double rhosum = (double) accu( trans(eta.col(newind))*om );
     int tabsum = arma::sum( tr );
-    for (int j = 0; j < auxLambdaM-lambdaN1; j++){
-      lambda(j + lambdaM ) =
-	rlamGivenR( rhosum, lambdaShape, lambdaRate, tabsum);
-      lambdaN( j+lambdaM ) = alphaLambda/auxLambdaM;
+    int lambdaElts = (auxLambdaM==0 || lambdaN1) ? lambdaM : lambdaM + 1;
+    arma::rowvec lambdaProbs =
+      logprob_p( tabsum, rhosum, lambda.head(lambdaElts) ) +
+      log( lambdaN.head( lambdaElts));
+    int intFGindx = lambdaN1 ? di2lam : lambdaM;
+    if (lambdaN1 || auxLambdaM){
+      lambdaProbs(intFGindx) =
+	log_piy((double) tabsum , rhosum, lambdaShape, lambdaRate) + log(alphaLambda);
     }
 
-    newind = newIndex(logprob_p( tabsum, rhosum,
-				 lambda.head(lambdaM+auxLambdaM) ) +
-		      log( lambdaN.head( lambdaM + auxLambdaM)));
+    newind = newIndex(lambdaProbs);
+
+    if (newind == intFGindx)
+	lambda(newind) = rlamGivenR( rhosum, lambdaShape, lambdaRate, tabsum);
 
     lambdaSize = updateXX(  newind, i, lambda, lambdaN, diToLambda, lambdaN1, lambdaM,
 	       decLambdaN, incLambdaNnew, incLambdaNold, auxLambdaM, verbose);
-
+    if (verbose>1L) Rprintf(" done\n");
   }
   if (verbose)  {
     Rprintf("delete Eta= %d add = %d use existing = %d ",
