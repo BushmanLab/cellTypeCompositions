@@ -437,7 +437,7 @@ Resizing is rather time consuming.
 	 i<ndat && etaM+auxM <= etaCols && lambdaM+auxLambdaM <= lambdaSize;
 	 i++){
 
-      if (verbose>1L) Rprintf("i = %d\n",i);
+      if (verbose>1L) Rprintf("i = %d",i);
 
       int di2e = diToEta[ i ];
       int etaN1; // singletons need one less 
@@ -478,7 +478,6 @@ Resizing is rather time consuming.
 
       // update-eta
 
-
       etaCols = updateXX(  newind, i, eta, etaN, diToEta, etaN1, etaM,
 		 decN, incNnew, incNold, auxM, verbose);
 
@@ -491,7 +490,6 @@ Resizing is rather time consuming.
       arma::rowvec lambdaProbs =
 	logprob_p( tabsum, rhosum, lambda.head(lambdaElts) ) +
 	log( lambdaN.head( lambdaElts));
-
       int intFGindx = lambdaN1 ? di2lam : lambdaM;
       if (lambdaN1 || auxLambdaM){
 	lambdaProbs(intFGindx) =
@@ -505,7 +503,7 @@ Resizing is rather time consuming.
 
       lambdaSize = updateXX(  newind, i, lambda, lambdaN, diToLambda, lambdaN1, lambdaM,
 		 decLambdaN, incLambdaNnew, incLambdaNold, auxLambdaM, verbose);
-
+      if (verbose>1L) Rprintf(" done\n");
     }
     if (verbose)  {
       Rprintf("delete Eta= %d add = %d use existing = %d ",
@@ -1484,7 +1482,9 @@ Approximate integral
 
 ** cpp
 
-#+begin_src cpp :noweb yes :tangle src/ct.cpp
+Use :main no to suppress treating code as a standalone program
+
+#+begin_src cpp :noweb yes :tangle src/ct.cpp :main no
   <<arma-headers>>
   #define LOGFACTORIAL(x) 0.0 
   <<rdirich>>
@@ -1506,8 +1506,49 @@ Approximate integral
   "done"
 #+end_src
 
+#+begin_src R :session *R:cellTypeCompositions*
+  source("R/gibbsDPP.R")
+  load("~/projects/bushman/WAS/derep-11-17/wttabs.etc.RData")
+  wtab <- wttabs[[11]]
+  om <- with(param.list[[11]],diag(upsilon)%*%omega%*%diag(psi))
+
+  tmp <- gibbsScan(wtab,om)
+
+  keepLogLik <- 
+    function(pass, log.posterior, i, nkeep){
+      if ( i == nkeep )
+	keep.default(pass,log.posterior,i,nkeep)
+      else
+	list(logLik = log.posterior)
+      }
+  }
+
+  tmp2  <- gibbsScan(wtab,om,nkeep=10L,keep=keepLogLik)
+
+  tableM <- function(){
+    avgs <- list(NULL)
+    function(pass,log.posterior, i , nkeep){
+      avgs[[(i-1)%/%10+1]] <<-
+	if (i%%10 == 1) log.posterior
+      else
+	avgs[[(i-1)%/%10+1]] + log.posterior
+      if (i == nkeep) list(avgs = unlist(avgs)/10,
+			   keep.default(pass,log.posterior,i,nkeep)
+			   )
+    }
+  }
+
+  tabFun <- tableM()
+
+  tmp3  <- gibbsScan(wtab,om,nkeep=30L,keep=tabFun)
+
+
+#+end_src
+
 #+RESULTS:
 : done
+
+
 
 * tuneup
 
