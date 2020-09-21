@@ -252,7 +252,7 @@ Resizing is rather time consuming.
   ,*/
 
   #define MORESIZE 10L
-  #define MAXSIZE 100L
+  #define MAXSIZE 500L
 
 
   int updateXX( int newind,
