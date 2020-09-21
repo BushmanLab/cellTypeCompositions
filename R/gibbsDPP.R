@@ -159,8 +159,10 @@ gibbsDPP <- function(
 ##'     to do.
 ##' @param nthin how many iterations per saved value
 ##' @param nburn discard this many iterations before saving any values
-##' @param keep vector of elements of the result in each iteration to
-##'   retain or a function called with \code{pass}, the intermediate results, 
+##' @param keep either \code{TRUE} to apply \code{keep.default} to the
+##'     result in each iteration or a function called with
+##'     \code{pass}, the intermediate results, and the other arguments
+##'     of \code{keep.default}
 ##'
 ##' @param ... currently unused
 ##' @param abEta if \code{NULL} treat \code{alphaEta} as a fixed
