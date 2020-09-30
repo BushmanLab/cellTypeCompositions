@@ -216,6 +216,7 @@ gibbsScan <- function(wtab,
     om[om==0.0] <- .Machine[["double.eps"]]
     warning("Converted zeroes in om to machine epsilon")
   }
+  stopifnot(rowSums(om)<=1.0)
   if (is.null(eta))  eta <- array(0.0,c(nrow(om),etaCols))
     if (is.null(dataToEta)){
         dataToEta <- rep(-1L,length(wtab[["data.index"]]))
