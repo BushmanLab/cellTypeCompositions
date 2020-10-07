@@ -195,7 +195,7 @@ gibbsScan <- function(wtab,
                       abEta = c(0.0001,0.0001),
                       abLambda = c(0.01,0.01),
 		      verbose = FALSE, dprior = 1.0,
-                      lambdaShape = 1.0, lambdaRate=0.01,
+                      lambdaShape = 0.1, lambdaRate=0.1,
                       keep = TRUE, niter.tune=10L,
 		      ...){
   ## define helper functions:
@@ -395,8 +395,8 @@ update.ctScan <- function(object, elt = length(object), ...){
 keep.default <-
     function(pass, log.posterior, i, nkeep){
         with(pass,
-             list(eta = eta[, 1:etaM],
-                  etaN = etaN[ 1:etaM],
+             list(eta = eta[, 1:etaM, drop=FALSE ],
+                  etaN = etaN[ 1:etaM ],
                   dataToEta = as.vector(dataToEta + 1L),
                   etaM = etaM,
                   lambda = lambda[1:lambdaM],
