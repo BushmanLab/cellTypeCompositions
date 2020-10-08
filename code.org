@@ -127,7 +127,7 @@
 
 #+name: logIntFG
 #+begin_src cpp :noweb yes
-  #define LOWLIM 4
+  #define LOWLIM 8
   <<piy>>
   <<piky>>
 
@@ -147,7 +147,7 @@
 
 #+name: intFG
 #+begin_src cpp
-  #define LOWLIM 4
+  #define LOWLIM 8
 
   inline double piy(double y, double rho, double alpha, double beta){
     double piwhy =  exp(log_pi_Y_approx(y, (double) LOWLIM - 0.5,  rho, alpha, beta));
@@ -994,6 +994,8 @@ values for small r.
 ** int FG
 
 
+Checks on the integrals are done here:
+
 #+begin_src R :noweb yes
   Rcpp::sourceCpp(code="
   <<arma-headers>>
@@ -1063,7 +1065,21 @@ values for small r.
   tmp4  <- sapply(1:100,function(x) logIntFG(x,.5,1,.1))
   all.equal(exp(tmp4),tmp2)
 
+
+  intFG3 <- function(y,rho,alpha,beta,tol=1e-5){
+    fun <- function(x) dpois(y,rho*x)/ppois(0,rho*x,lower.tail=FALSE)*dgamma(x,alpha,rate=beta)
+    res1 <- integrate(fun,0,10,rel.tol=tol)
+    res2 <- integrate(fun,10,Inf,rel.tol=tol)
+    res1$value+res2$value
+  }
+
+  # the integrate function is close
+  tmp5 <- sapply(1:100, function(x) intFG3(x,.5,1,.1,tol=1e-12))
+  all.equal(tmp5,tmp3/factorial(1:100),tolerance=0.001)
 #+end_src
+
+#+RESULTS:
+: TRUE
 
 prob k
 

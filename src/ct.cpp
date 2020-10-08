@@ -52,7 +52,7 @@ inline arma::rowvec logprob_p( int r, double p, arma::rowvec lambda ){
   return result;
 }    
 
-#define LOWLIM 4
+#define LOWLIM 8
 
 
 
@@ -178,7 +178,7 @@ inline double rlamGivenR(double rho,double alpha,double beta,int r){
 */
 
 #define MORESIZE 10L
-#define MAXSIZE 100L
+#define MAXSIZE 500L
 
 
 int updateXX( int newind,
