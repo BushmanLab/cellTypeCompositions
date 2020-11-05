@@ -195,7 +195,7 @@ gibbsScan <- function(wtab,
                       abEta = c(0.0001,0.0001),
                       abLambda = c(0.01,0.01),
 		      verbose = FALSE, dprior = 1.0,
-                      lambdaShape = 0.1, lambdaRate=0.1,
+                      lambdaShape = 1.0, lambdaRate=0.01,
                       keep = TRUE, niter.tune=10L,
 		      ...){
   ## define helper functions:
