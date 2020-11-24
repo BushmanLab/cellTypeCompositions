@@ -1725,3 +1725,66 @@ Use :main no to suppress treating code as a standalone program
   microbenchmark::microbenchmark(xlogy(x,y),xlogy2(x,y))
 #+end_src
   
+
+
+* cpp doc
+
+#+begin_src cpp :noweb yes :tangle inst/ct-doc.cpp
+  //
+  // basic Armadillo headers:
+  //
+  <<arma-headers>>
+  //
+  // the combinatorial constant is usually not needed 
+  //
+  #define LOGFACTORIAL(x) 0.0
+  //
+  // sample from n-1 simplex with rep(d,n) as Dirichlet param
+  //
+  <<rdirich>>
+  //
+  // truncated Poisson
+  //
+  <<logprob_Rplus>>
+  //
+  // truncated Gamma-Poisson integral
+  //
+  <<logIntFG>>
+  //
+  // multinomial probability kernel
+  //
+  <<logprobMulti>>
+  //
+  // sample 1 value given log probs 
+  //
+  <<newIndex>>
+  //
+  // auxiliary varible (unseen trials)
+  //
+  <<rkReject>>
+  //
+  // sample lambda using auxiliary variable
+  //
+  <<rlamGivenR>>
+  //
+  // manage updating DPP objects with current draw
+  //
+  <<updateXX>>
+  //
+  // scan data, draw eta and lambda for each 
+  //
+  <<auxGibbs>>
+  //
+  // normalize prob, then sample multinomial
+  //
+  <<rmultnm>>
+  //
+  // negative binomial draw given lambda, rhoplus
+  //
+  <<rN0GivenN1>>
+  //
+  // update eta and lambda parameters
+  //
+  <<sampleParms>>
+
+#+end_src
