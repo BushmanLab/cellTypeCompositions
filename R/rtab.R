@@ -8,7 +8,7 @@
 ##' @param elt which element of the scan to use in sampling.
 ##' @param tol lower limit on probability of observing a clone
 ##' @return table of counts 
-##' @importFrom stats rpois
+##' @importFrom stats rpois rnbinom ppois
 ##' @export
 ##' @author Charles Berry
   rtab <- function(scan, om, elt=length(scan),tol=1e-3){
