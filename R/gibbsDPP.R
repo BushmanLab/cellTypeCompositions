@@ -29,7 +29,7 @@
 ##' allow \code{update} to resume iteration.
 ##' @title Dirichlet Process Prior Gibbs Sampler
 ##' @param wtab the result of \code{\link{uniTab}}
-##' @param om the object returned by \code{\link{exOGS}(paramList)}
+##' @param om the object returned by \code{\link{omega}(paramList)}
 ##' @param eta (optional) initialization and workspace for the sampled
 ##'     parameters
 ##' @param etaN (optional) initialization and workspace for the counts
