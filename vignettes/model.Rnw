@@ -1,0 +1,552 @@
+% Created 2021-01-01 Fri 14:28
+% Intended LaTeX compiler: pdflatex
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{grffile}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{textcomp}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\usepackage{tikz} \usetikzlibrary{bayesnet} \usepackage{framed} \usepackage{float}
+%\VignetteIndexEntry{The cellTypeCompositions Model}
+\author{Charles Berry}
+\date{\today}
+\title{Model and Methods for the \texttt{cellTypeCompositions} Package}
+\hypersetup{
+ pdfauthor={Charles Berry},
+ pdftitle={Model and Methods for the \texttt{cellTypeCompositions} Package},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={Emacs 26.3 (Org mode 9.4.3)}, 
+ pdflang={English}}
+\begin{document}
+
+\maketitle
+The package implements a Bayesian hierarchical model that captures key
+features of the cell types produced by clones resulting from gene
+therapy using constructs that integrate into the host genome.
+Retroviral gene therapy for some diseases seeks to
+provide a functional gene to correct Hematopoetic Stem Cell
+(HSCs).
+Monitoring of the populations of cells over time can help establish an
+understanding the success or failure of any gene therapy construct
+and may give early indications of the likelihood of long term success. 
+In humans undergoing gene therapy, the integration site (IS) locations
+almost always identify unique integration events, so that all cells
+sharing an IS location are clones.  Thus, the IS locations serve as
+molecular tags to enable study of gene corrected cell populations in
+human patients
+\cite{pmid23845947,abina2015outcomes,berry2012estimating,pmid21228324}.
+IS can be isolated using random shearing of the host genome followed
+by LAM-PCR.  Within a single specimen, cell type fraction, and
+replicate shearing, the unique breakpoints correspond to unique cells
+with high probability unless the number of cells is so large that
+cells coincidentally share the same breakpoint
+\cite{pmid28344988,pmid28344990}. (Even in the latter case, the number
+of breakpoints is predictably related to the number of cells.)
+
+The essential features of the model for such data are given in the
+plate diagram in Figure \ref{fig:dpp}.  The model specifies two
+Dirichlet Process priors --- one for compositional proportions and one
+for abundances.  A plate graph for a genric Dirichlet Process prior is
+given in Figure \ref{fig:dpp1}. The details of the model and the sampler
+are laid out in the next section.  In particular, Section \ref{sec:orgaba8e76} sets out the model, while Section \ref{sec:org7e4467f} lays out
+the updates and \ref{sec:org393a01e} give details of an auxilary variable
+gambit that aids one of the updates.
+
+
+\section{Overview}
+\label{sec:org987d28b}
+
+In this document, the notation uses dots and plus signs in subscripts
+to indicate vectors composed of all elements using the subscript a dot
+occupies or summation over all such elements of the subscript occupied
+by a plus sign. So, \(X_{i\bullet} = (X_{i1},X_{i2},\dots,X_{iJ})\) and
+\(X_{i+} = (X_{i1}+X_{i2}+\dots+X_{iJ})\).
+
+
+
+
+
+
+As shown schematically in Figures \ref{fig:dpp} and \ref{fig:dpp1} there
+is an \textbf{Initial Sample} whose cells are from a specimen drawn from a
+patient at one time. That sample is represented by a \(N \times J\)
+matrix of cell type frequencies for \(N\) integration sites and \(J\)
+cell types. A row of that matrix is denoted by \(X_{i\bullet}\).  The
+vector of cell type frequencies, \(X_{i\bullet}\), depends on a
+composition specifying cell type proportions
+(\(\eta_{Z^{(\eta)}_{i}\bullet}\)) and an abundance
+(\(\lambda_{Z^{(\lambda)}_{i}}\)). (\(Z^{(\eta)}_i\) indexes the
+element of \(\eta\) associated with IS \(i\) and similarly for
+\(Z^{(\lambda)}_i\) and \(\lambda\).) Each of these is drawn from a
+Dirichlet Process Prior. The cell type frequencies are subject to
+filtering in which some cells may be lost (resulting in \(\tilde
+X_{i\bullet}\) as governed by a vector of proportions, \(\Upsilon\)),
+leading to a \textbf{Secondary Sample}.  The Secondary Sample is sorted with
+possible sorting errors (resulting in \(Y_{i\bullet}\) as governed by
+the transition matrix, \(\Xi\)). The \textbf{Sequenced Sample} is subject to
+post-sort loss (resulting in \(W_{i\bullet}\) governed by the vector
+of proportions \(\Psi\)). Finally, those \(W_{i\bullet}\) for which at
+lesst one element is non-zero are observed as \(W^{(+)}_{i\bullet}\)
+and the remainder (\(W^{(-)}_{i\bullet}\)) are not. The data analyst
+is only cognizant of the \(W_{i\bullet}^{(+)}\).
+
+
+\section{Updates}
+\label{sec:orgb666bc2}
+\subsection{Priors and Likelihood}
+\label{sec:orgaba8e76}
+
+Two Dirichlet Process priors are invoked in the model: one for the
+abundance parameter, \(\lambda\), and one for the composition, \(\eta\).
+
+The concentration parameters for the stick-breaking component of the
+priors have gamma distributions, with fixed parameters for the shape,
+\(a\), and the rate, \(b\).
+
+\[\alpha_\lambda \sim Ga(a_\lambda, b_\lambda)\]
+
+
+\[\alpha_\eta \sim Ga(a_\eta, b_\eta)\]
+
+The prior for \(\lambda\)\textsubscript{i}, has \(Ga(k,\beta)\) as its base distribution
+and \(\delta(\theta)\) is the distribution that contentrates all of
+its mass at \(\theta\) :
+
+\[\lambda_i|\lambda_{1},\lambda_{2},\dots,\lambda_{i-1} \sim \frac{1}{i+\alpha_\lambda-1}\sum_{j=1}^{i-1}
+  \delta(\lambda_j) +
+  \frac{\alpha_\lambda}{i+\alpha_\lambda-1}Ga(\kappa,\beta)\]
+
+The prior for \(\eta\)\textsubscript{i\textbullet{}}, has the Dirichlet distribution \(Dir(d\mathbf{1})\)
+(typically with \(d\) being one and \(\mathbf{1}\) being the unit vector) as its base distribution
+
+\[\eta_{i\bullet}|\eta_{1\bullet},\eta_{2\bullet},\dots,\eta_{i-1,\bullet} \sim \frac{1}{i+\alpha_\eta-1}\sum_{j=1}^{i-1}
+  \delta(\eta_{j\bullet}) +
+  \frac{\alpha_\eta}{n+\alpha_\eta-1}Dir(d\mathbf{1})\]
+
+
+
+For the purpose of Gibbs sampling, the conditional priors for
+\(\lambda\)\textsubscript{i} and \(\eta\)\textsubscript{i\textbullet{}} can be derived by taking the \(i^{th}\) element
+as the last of \(n\) elements observed as noted by Neal \cite{neal2000markov} :
+
+
+
+\[\lambda_i|\lambda_{-i} \sim \frac{1}{n+\alpha_\lambda-1}\sum_{i\ne j}
+  \delta(\lambda_j) +
+  \frac{\alpha_\lambda}{n+\alpha_\lambda-1}Ga(\kappa,\beta)\]
+
+
+
+\[\eta_{i\bullet}|\eta_{-i\bullet} \sim \frac{1}{n+\alpha_\eta-1}\sum_{i\ne j}
+  \delta(\eta_{j\bullet}) +
+  \frac{\alpha_\eta}{n+\alpha_\eta-1}Dir(d\mathbf{1})\]
+
+where \(\lambda_{-i} = \{\lambda_j:j\ne i\}\) and \(\eta_{-i\bullet} = \{\eta_{j\bullet}:j\ne i\}\). 
+
+The cells of each type for observation \(i\) follow a Poisson
+distribution:
+
+\[X_{ij}|\eta_{ij},\lambda_i \sim Pois(\lambda_i\eta_{ij})\]
+
+
+Those cells are sorted and subsampled. The counts of cells omitted and
+retained after under subsampling are given by \(C_i\) and
+\(Y_{i\bullet}\).
+
+\[(C_i,Y_{i\bullet})|X_{i\bullet} \sim \sum_{j=1}^{J}{Mn( X_{ij}, \widetilde\Omega_{j\bullet})} \]
+
+\[\widetilde\Omega_{j\bullet} = \left(1-\Omega_{j+},\, \Omega_{j\bullet}\right)\]
+
+
+The sum of each row of \(\Omega\), \(\Omega_{j+}\), gives the probability
+of retaining a cell of type \(j\), and the vector
+\(\frac{1}{\Omega_{j+}}\Omega_{j\bullet}\) give the probabilities
+that retained cells are sorted into tubes intended for the respective cell types.
+
+In practice, the analyst only sees the vector of counts for integration site \(i\), \(Y_{i\bullet}\), if
+its sum is non-zero, i.e. the integration site is detected. The subset of detected sites is given by \({W_{1\bullet},\dots,W_{n\bullet}}\)
+
+\[W_{i\bullet} = Y_{i'\bullet}\quad \mathrm{where}\, i' = {\min} \left\{t:i=\sum_{j=1}^t\min(1, Y_{j+})\right\}  \]
+
+The probability law for \(W_{i\bullet}\) given \(\eta_{i'\bullet}\) and
+\(\lambda_{i'}\) turns out to be the product of Poisson laws truncated
+when all counts are zero.
+
+\[W_{i\bullet}|\eta_{i'\bullet},\lambda_{i'} \sim PoisPos(\lambda_{i'}\eta_{i'\bullet}\Omega) \]
+
+where \(PoisPos(\cdot )\) is the distribution of a product of
+independent Poisson variables conditioned on having at least one
+non-zero value. This distribution is easily shown to be the product
+of a multinomial and a zero truncated Poisson whose mass function is:
+
+
+
+
+\[ dPoisPos(W_{i\bullet};\rho_\bullet) = dTrPois(W_{i+};\rho_{+}) \cdot dMn\left(W_{i\bullet};W_{i+},\frac{1}{\rho_{+}}\rho_\bullet\right) \]
+
+with \(dTrPois(\,)\) as the zero-truncated Poisson mass and \(dMn(\,)\) as the
+multinomial mass function.
+
+In what follows, \(i\) will be equated with \(i'\) for notational
+convenience (as might happen if all truncated observations had
+\(i'>n\)).
+
+
+\subsection{Gibbs Updates}
+\label{sec:org7e4467f}
+
+The update strategy is much like that of algorithm 8 of Neal \cite{neal2000markov} : a
+scan for \(i=1:n\) is used to sample a parameter vector for each
+observation and then each unique parameter vector is sampled
+conditional on the data elements that depend on it using the base
+distribution as its prior.  The scan-update process yields a draw from
+the posterior and is repeated to estmate the posterior distribution.
+
+However, there are two sets of parameters having Dirichlet Process
+priors, and the updates to one must condition on the other.  So some
+method of initializing the scan is needed. Also, in algorithm 8, one
+or more samples drawn from the prior base distribution in each step,
+\(i\), of the scan compete with samples drawn earlier.  Using a
+diffuse base distribution for \(\lambda\) poses a problem in that only
+values with small posterior density may be drawn.  This could require
+excessively long MCMC burn-ins to converge to the stationary
+distribution.  Fortunately, efficent numerical integration of the
+posterior with respect to \(\lambda_i|W_{i\bullet},\eta_{i\bullet}\)
+is feasible as is sampling from it when its factor in the likelihood
+depends on only one value of \(W_{i\bullet}\).  This ensures good
+choices for the values of \(\lambda\) selected during the scan.  Even though the base
+prior is not conjugate for \(\lambda\), the computability of the
+integral and the posterior draws allows \(\lambda\)\textsubscript{i} to sampled as in
+Algorithm 1 of Neal \cite{neal2000markov} during the scans.
+The later updates are not affected by this problem as they use
+Gibbs samples that are initialized with the earlier values.
+
+In this section, the unique values of \(\eta_{i\bullet},\, i=1:n,\) must be
+referenced. The notation \(\eta_{c_h\bullet}\) will be used to refer to the
+\(h^{th}\) such value, and when an update to that value is performed
+(in step 2), it is implied that the update applies to all parameters
+that shared that value after step 1. Similarly, this applies to \(\lambda_i,\, i=1:n\).
+A single cycle of updates proceeds as follows
+
+
+\begin{enumerate}
+\item for each \(i=1:n\)
+\begin{itemize}
+\item sample \(\eta_{i\bullet}|W_{i\bullet},\lambda_i,\eta_{-i\bullet}\) (on the first pass sample
+\(\eta_{i\bullet}|W_{i\bullet},\{\eta_{j\bullet}:j<i\}\) using just the multinomial factor of the likelihood)
+\item sample \(\lambda_i|W_{i\bullet},\eta_{i\bullet},\lambda_{-i}\) (on the first pass let \(\lambda_{-i} = \{\lambda_j:j<i\}\))
+\end{itemize}
+\item (possibly) repeat 
+\begin{itemize}
+\item let \(c_1,\dots,c_H\) index the \(H\) unique values of \(\eta_{i\bullet}\)
+\item for (h=1:H) sample \(\eta_{c_h\bullet}|\{W_{i\bullet}:\eta_{i\bullet}=\eta_{c_h\bullet}\},\{\lambda_i:\eta_{i\bullet}=\eta_{c_h\bullet}\}\)
+\item let \(s_1,\dots,s_K\) index the \(K\) unique value of \(\lambda_i\)
+\item for (k=1:K) sample \(\lambda_{s_k}|\{W_{i\bullet}:\lambda_i=\lambda_{s_k}\},\{\eta_{i\bullet}:\lambda_i=\lambda_{s_k}\}\)
+\end{itemize}
+\item sample \(\alpha^{(\eta)}\)
+\item sample \(\alpha^{(\lambda)}\)
+\end{enumerate}
+
+
+Steps 1--2 may be repeated more than once before proceeding to steps
+3--4, and step 2 may be repeated several times for each time step 1 is
+executed.  Typically, steps 1--2 will be repeated many times to
+\emph{burn-in} the sampler without recording the results, then many
+replications of 1--4 will be recorded possibly \emph{thinning} the output
+by discarding several cycles of results for every one that is saved.
+
+
+In step 2, the update for
+\(\eta_{c_h\bullet}|\{W_{i\bullet}:\eta_{i\bullet}=\eta_{c_h\bullet}\},\{\lambda_i:\eta_{i\bullet}=\eta_{c_h\bullet}\}\)
+is given here.
+
+\(\eta_{c_h\bullet} \sim Dir( X + d \mathbf{1} )\) where
+\(\mathbf{1}\) is a unit vector of length \(J\). The vector, \(X =
+X^{(+)} + X^{(-)}\), depends on samples as follows:
+
+\[\rho_{i\bullet} = \eta_{i\bullet}\Omega\]
+
+\[C_{i} \sim Nb\left( W_{i+}, 1 - \exp(-\lambda_i\rho_{i+})\right)\]
+
+
+
+\[T_{\bullet j} \sim Mn\left(\sum_{i:\eta_{i\bullet}=\eta_{c_h\bullet}}(W_{ij})\,, \Omega_{\bullet j}/\Omega_{+j}\right)\]
+
+\[X^{(+)} = T\mathbf{1}'\]
+
+The elements of \(X^{(-)}\) are sampled as
+\[X_j^{(-)} \sim Pois(  \sum_{i:\eta_{i\bullet}=\eta_{c_h\bullet}}(C_i + 1)\lambda_i\eta_{ij}(1-\Omega_{j+}))\]
+
+
+In step 2, the update for
+\(\lambda_{c_k}|\{W_{i\bullet}:\lambda_i=\lambda_{c_k}\},\{\eta_{i\bullet}:\lambda_i=\lambda_{c_k}\}\)
+is given here using the updated \(\eta_{i\bullet}, i=1:n\).
+
+\[\rho_{i\bullet} = \eta_{i\bullet}\Omega\]
+
+\[D_{i} \sim Nb\left( 1, 1 - \exp(-\lambda_i\rho_{i+})\right)\]
+
+
+\[\lambda_{c_k} \sim Ga\left(\kappa+\sum_{i:\lambda_i=\lambda_{c_k}}W_{i+},\,\beta+\sum_{i:\lambda_i=\lambda_{c_k}}\rho_{i+}(D_i+1) \right)\]
+
+
+Steps 3 and 4 use the updates of Escobar and West \cite{escobar1995bayesian}. 
+
+
+\subsection{Posterior Integration and Sampling for \(\lambda\)\textsubscript{i}}
+\label{sec:org393a01e}
+As mentioned earlier, sampling fresh values of \(\lambda_i\) from the
+prior will often yield values with very low likelihoods.  Here, the
+integral of and sample from the posterior is developed.
+
+The factor of the posterior containing a unique \(\lambda\)\textsubscript{i} is
+
+\[\pi_\lambda(\lambda_i) = \frac{\beta^\kappa\lambda_i^{(\kappa-1)}\exp(-\beta\lambda_i)}
+       {\Gamma(\kappa)}
+  \frac{\exp(-\rho_{i+}\lambda_i)(\rho_{i+}\lambda_{i})^{W_{i+}}}
+       {W_{i+}!(1-\exp(-\rho_{i+}\lambda_i))}\]
+
+To integrate this term, a discrete auxiliary variable is introduced that
+simplifies integration after which the auxiliary variable is eliminated
+by summing over all of its values.
+
+Multiplication by a geometric variable, \(t\), with failure
+probability \(\exp(-\rho_{i+}\lambda_i)\) (and hence mass of \(\exp(-t\rho_{i+}\lambda_i)(1-\exp(-\rho_{i+}\lambda_i))\)
+
+gives the joint density of \(\lambda\)\textsubscript{i} and \(t\) proportional to
+
+\[f(\lambda_i,t)=\exp(-(\beta+\rho_{i+}(t+1))\lambda_i)\lambda_i^{(\kappa+W_{i+}-1)}\]
+
+which is the kernel of a gamma density for fixed \(t\). The integral
+with respect to \(\lambda\)\textsubscript{i} is just the reciprocal of the normalizing
+constant of that gamma density, viz.
+
+\[g(t) = \int_0^\infty f(\lambda_i,t)\partial \lambda_i = \frac{\Gamma(\kappa+W_{i+})}{(\beta+\rho(t+1))^{\kappa+W_{i+}}}\]
+
+So, the integral of the factor is
+
+\[\int_0^\infty \pi_\lambda(\lambda_i)\partial \lambda_i = C \sum_{t=0}^\infty g(t)\]
+
+
+The terms in \(g(t)\) are decreasing in \(t\), but for small values of
+\(\kappa+W_{i+}\) do not decrease rapidly enough to allow just a few
+terms to be summed. However, the indefinite integral of \(g(t)\) is
+easily found and the approximation
+
+\[g(t) \approx \int_{t-\frac{1}{2}}^{t+\frac{1}{2}}g(t)\partial t\]
+
+becomes better as \(t\) increases, and taking
+
+\[\sum_{t=0}^\infty g(t) \approx \sum_{t=0}^m g(t) + \int_{m+\frac{1}{2}}^\infty g(t)\partial t\]
+
+yields an adequate approximation of \(\int_0^\infty
+\pi_\lambda(\lambda_i)\partial \lambda_i\) for reasonably small values of \(m\).
+
+Posterior samples for \(\lambda_i\) can be drawn from the gamma
+distribution with kernel \(f(\lambda_i,t)\) by conditioning on a value of
+\(t\) drawn from its marginal distribution.  Samples from the marginal
+distribution of \(t\) can be had by rejection sampling with proposals
+from the inverse CDF of a continuous distribution proportional to \(g(t)\),
+\(-\frac{1}{2}<t<\infty\), rounded to the nearest integer. If a
+uniform draw on \((0,1)\) exceeds
+\(g(t)/\int_{t-\frac{1}{2}}^{t+\frac{1}{2}}g(x)\partial x\)
+the proposal is rejected.
+
+In practice, the approximation is quite poor for small values of
+\(t\), and the fraction rejected is large.  A modification of this
+scheme is sampling from \(m+2\) masses proportional to \(g(0),
+g(1),\dots,g(m)\) and \(\int_{m+\frac{1}{2}}^\infty g(x) \partial
+x\). If any of the values \(t=0,\dots,m\) is selected, it is accepted.
+If the last mass is selected, a proposal is drawn from a density
+proportional to \(g(t)\), \(m+\frac{1}{2} < t < \infty\) rounded to
+the nearest integer, and a rejection trial performed as above. If
+rejection occurs, another draw from the \(m+2\) masses is attempted.
+Even for values as small as \(m=5\) rejections are rare.
+
+
+
+\section{plate graph}
+\label{sec:orgf231a51}
+  \begin{figure}[H]
+    \begin{framed}
+      \centering
+      % \beginpgfgraphicnamed{model-lda}
+      \begin{tikzpicture}[x=1.7cm,y=1.8cm]
+
+	% Nodes
+
+	\node[latent,label={[red]-45:\Large Initial Sample},label=30:cell type] (X) {$X_{i\bullet}$}; % X
+	\node[latent, below=of X,label={[red]-45:\Large Secondary Sample}] (ckX) {$\check{X}_{i\bullet}$}; % ckX
+	\node[latent, right=of X,label=0:Composition Index] (Z) {$Z^{(\eta)}_i$}; % Z-eta
+	\node[latent, xshift=1cm, above = of Z] (V) {$V^{(\eta)}_t$}; % V-eta
+	\node[latent, below=of ckX,label=30:observed type] (Y) {$Y_{i\bullet}$}; % Y
+	\node[latent, left=of V,label=90:Compositions] (eta) {$\eta_{t\bullet}$}; % eta
+	\node[latent, left=of eta,label=90:Abundances] (lambda) {$\lambda_{t}$}; % eta
+	\node[latent, left=of lambda] (Vlam) {$V^{(\lambda)}_t$}; % V-lambda
+	\node[latent, left=of X,label=-90:Abundance Index] (Zlam) {$Z^{(\lambda)}_i$}; % Z-lambda
+	\node[latent, below=of Y] (W) {$W_{i\bullet}$}; % W
+	\node[obs, right=of W,label={[red]90:\Large Sequenced Sample},
+	label=-80:Observed Counts] (Wplus) {$W^{+}_{i\bullet}$}; % Wplus
+	\node[latent, below=of W] (Wminus) {$W^{-}_{i\bullet}$}; %Wminus
+
+	\node[const, left= 3cm of Y] (omega) {$\Xi$}; % omega
+	\node[const, left= 3cm of W] (psi) {$\Psi$} ; % psi
+	\node[const, left= 3cm of ckX] (upsi) {$\Upsilon$} ; % upsilon
+
+
+%	\node[latent, right= of Zlam,label=-90:Cells Sampled] (M) {$M_n$}; % M
+
+
+
+	\node [const, xshift=0.25in, left=of X] (nada-left) {}; \node
+	[const, xshift=0.45in, left=of eta] (nada-left-eta) {}; \node
+	[const, xshift=-0.45in, right=of X] (nada-right) {}; \node
+	[const, xshift=-0.55in, right=of Z] (nada-right-Z) {}; \node
+	[const, yshift=-0.45in, above=of Z] (nada-over-Z) {}; \node
+	[const, xshift=-0.35in, right=of V] (nada-right-V) {}; \node
+	[const, yshift=-0.45in, above=of V] (nada-over-V) {}; \node
+	[const, xshift=-0.38in, right=of lambda] (nada-right-lam) {}; \node
+	[const, yshift=-0.45in, above=of Vlam] (nada-over-Vlam) {}; \node	
+	[const, yshift=0.45in, below=of Y] (nada-under-Y) {};
+
+
+
+	\plate {plate1} { %
+	  (Wminus)(X)(Z)(Zlam)(nada-left)(nada-right-Z)(nada-over-Z) %
+	} {$i=1:N$}; %
+
+	\plate {plate2} { %
+	  (V)(eta)(nada-right-V)(nada-over-V)(nada-left-eta) %
+	} {$t=1:\infty$}; %
+
+	% \plate {plate3} { %
+	% (X)(eta)(Y)(nada-left)(nada-right)(nada-under-Y) %
+	% } {$k=1,\dots,K$}; %
+
+	% \plate[xshift=0.15in,yshift=0.03in] {plate-xy}
+	% {(X)(nada-right)(W)} {\hspace{0.25in}$m=1:M_i$};
+
+	\plate {plate4} {
+	  (Vlam)(nada-over-Vlam)(lambda)(nada-right-lam)}{$t=1:\infty$};
+
+
+	\edge {omega}{Y};
+	\edge {X}{ckX};
+	\edge {ckX}{Y};
+	\edge {eta}{X};
+	%\edge {lambda}{M};
+	\edge {Z}{X};
+	\edge {V}{Z};
+	\edge {Zlam}{X};
+	\edge {lambda}{X};
+	\edge {Vlam}{Zlam};
+	\edge {Y}{W};
+	\edge {psi}{W};
+	\edge {upsi}{ckX};
+
+	\edge {W}{Wplus};
+	\edge {W}{Wminus};
+      \end{tikzpicture}
+
+      \captionof{figure}{Hierarchical Model of Cell Type Composition.
+	The boxes or `plates' show replication according to the schema
+	in the lower right corner of each plate with `$1:N$' indicating
+	the sequence of all integers from 1 to $N$.  The shaded circle
+	shows the observed data, while unshaded circles show latent,
+	unobserved variables. Symbols without circles are fixed
+	constants. The arrows indicate the dependencies of the nodes on
+	one another.}
+      \label{fig:dpp}
+
+      % \endpgfgraphicnamed
+    \end{framed}
+  \end{figure}
+
+
+
+\begin{figure}[H]
+  \begin{framed}
+    \centering
+    % \beginpgfgraphicnamed{model-lda}
+    \begin{tikzpicture}[x=1.7cm,y=1.8cm]
+
+
+
+      \node[latent, ] (V) {$V^{(\lambda)}_t$}; % V-eta
+      \node[latent, left=of V, label=70:Abundances] (lambda) {$\lambda_t$}; % lambda
+      \node[latent, above=of V] (alpha) {$\alpha^{(\lambda)}$}; % alpha
+      \node[const, above=of lambda] (zeta) {$\zeta^{(\lambda)}$}; % zeta
+      \node[const, right=0.5cm of alpha] (tau) {$\tau^{(\lambda)}$}; % tau
+
+      \node [const, xshift=0.45in, left=of lambda] (nada-left-lambda) {}; \node
+      [const, xshift=-0.35in, right=of V] (nada-right-V) {}; \node
+      [const, yshift=-0.45in, above=of V] (nada-over-V) {};
+
+      \edge {alpha}{V};
+      \edge {tau}{alpha};
+      \edge {zeta}{lambda};
+
+      
+      \plate {plate2} { %
+        (V)(lambda)(nada-right-V)(nada-over-V)(nada-left-lambda) %
+      } {$t=1:\infty$}; %
+
+
+      \node[latent, right=of nada-right-V] (V2) {$V^{(\eta)}_t$}; % V-eta
+      \node[latent, right=of V2, label=125:Compositions] (eta) {$\eta_t$}; % eta
+      \node[latent, above=of V2] (alpha2) {$\alpha^{(\eta)}$}; % alpha2
+      \node[const, above=of eta] (zeta2) {$\zeta^{(\eta)}$}; % zeta2
+      \node[const, left=0.5cm of alpha2] (tau2) {$\tau^{(\eta)}$}; % tau2
+
+      \node [const, xshift=-0.45in, right=of eta] (nada-right-eta) {}; \node
+      [const, xshift=0.25in, left=of V2] (nada-left-V2) {}; \node
+      [const, yshift=-0.45in, above=of V2] (nada-over-V2) {};
+
+      \edge {alpha2}{V2};
+      \edge {tau2}{alpha2};
+      \edge {zeta2}{eta};
+
+      
+      \plate {plate3} { %
+        (V2)(eta)(nada-left-V2)(nada-over-V2)(nada-right-eta) %
+      } {$t=1:\infty$}; %
+
+
+
+      
+    \end{tikzpicture}
+
+    \captionof{figure}{Dirichlet Process Priors for $\lambda$ and $\eta$.
+      Each `plate' shows replication over an infinite number of draws.
+      The base distribution for $\lambda$ has a parameter, $\zeta^{(\lambda)}$.
+      The stick-breaking component, $V^{(\lambda)}$, is based on draws from a beta
+      distribution with parameters 1 and $\alpha^{(\lambda)}$.  The latter
+      parameter is drawn from a gamma distribution with shape and
+      rate given by the two elements of the vector $\tau^{(\lambda)}$, which are
+      usually chosen to be small to yield a diffuse prior.  The mass
+      for the \(t^{th}\)
+      component of $\lambda_t$
+      is \(V^{(\lambda)}_t\prod_{k<t}(1-V^{(\lambda)}_k)\).
+      The setup is analogous for \(\eta\).
+      Symbols without circles are fixed constants. The arrows indicate
+      the dependencies of the nodes on one another.}
+    \label{fig:dpp1}
+
+    % \endpgfgraphicnamed
+  \end{framed}
+\end{figure}
+
+
+
+\bibliographystyle{plain}
+\bibliography{model}
+\end{document}
