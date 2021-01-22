@@ -212,11 +212,12 @@ gibbsScan <- function(wtab,
   mc <- match.call()
 
   stopifnot(all(om>=0.0))
+  stopifnot(rowSums(om)<=1.0)
   if (any(om==0.0)){
-    om[om==0.0] <- .Machine[["double.eps"]]
+      om[om==0.0] <- .Machine[["double.eps"]]
+      om  <- om / pmax( 1.0, rowSums( om ) ) 
     warning("Converted zeroes in om to machine epsilon")
   }
-  stopifnot(rowSums(om)<=1.0)
   if (is.null(eta))  eta <- array(0.0,c(nrow(om),etaCols))
     if (is.null(dataToEta)){
         dataToEta <- rep(-1L,length(wtab[["data.index"]]))
