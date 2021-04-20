@@ -1,0 +1,11 @@
+[.#*]*Rpackages*
+[.#*]*code.org
+[.#*]*README.org
+.*tar.gz
+nobuild/.*
+[.][#].*
+Rprof.out
+.*img/.*
+.*img
+nobuild
+downloads
