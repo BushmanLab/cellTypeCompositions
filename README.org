@@ -1,0 +1,38 @@
+
+* cellTypeCompositions
+
+Estimate cell type compositions from a table of clone by cell type
+counts. Functions are provided for exploring the cell type
+compositions that are displayed by cell lineages.  The workhorse is a
+function that performs blocked Gibbs sampling on the cell type
+frequencies in a parent population under a model that assumes a vague
+prior for the total number of cells and a uniform Dirichlet prior for
+the proportions fo different cell types.
+
+* Installation
+
+You will need a fairly recent installation of ~R~ and the ~devtools~
+package and its dependencies.
+
+
+#+begin_src R
+  library(devtools)
+  install_github( "BushmanLab/cellTypeCompositions",
+		  ref="main",
+		  build_vignettes=TRUE )
+#+end_src
+
+
+* Model
+
+The model implemented is described in the ~model~ vignette. After
+installation of the package, enter the following lines at the R prompt:
+
+#+begin_src R
+  library(cellTypeCompositions)
+  vignette( "model", "cellTypeCompositions")
+#+end_src
+
+* Usage
+
+See the help page for the ~gibbsScan~ function. Run the example code for a start.
