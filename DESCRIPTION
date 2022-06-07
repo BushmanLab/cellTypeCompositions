@@ -1,6 +1,6 @@
 Package: cellTypeCompositions
-Date: 2021-01-22
-Version: 0.1.17
+Date: 2022-06-07
+Version: 0.1.18
 License: GPL (>= 2)                          
 Description: Estimate cell type compositions from a table of clone
       by cell type counts. Functions are provided for exploring the cell
@@ -13,5 +13,5 @@ Title: Cell Type Compositions Gibbs Sampler
 Author: Charles Berry                       
 Maintainer: Charles Berry <ccberry@ucsd.edu>    
 RoxygenNote: 7.1.0
-Imports: Rcpp (>= 0.12.16), methods
+Imports: Rcpp (>= 0.12.16)
 LinkingTo: Rcpp, RcppArmadillo

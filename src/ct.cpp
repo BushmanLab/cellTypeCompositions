@@ -27,7 +27,7 @@ inline double llkr( int rsum, int n, double p, double lambda ){
   }
   else
     {
-      if (lambda<DOUBLE_XMIN) lambda = DOUBLE_XMIN;
+      if (lambda<DBL_MIN) lambda = DBL_MIN;
       llk = (double) rsum * (log(lambda)+log(p)) -
 	(double) n*(lambda*p + log1p(-exp(-lambda*p)));
     }
