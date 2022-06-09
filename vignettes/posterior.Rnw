@@ -1,0 +1,132 @@
+% Created 2021-01-22 Fri 13:53
+% Intended LaTeX compiler: pdflatex
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{grffile}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{textcomp}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\usepackage{tikz} \usetikzlibrary{bayesnet} \usepackage{framed} \usepackage{float}
+%\VignetteIndexEntry{Posterior Predictions}
+\author{Charles Berry}
+\date{\today}
+\title{Posterior Predictions with the \texttt{cellTypeCompositions} Package}
+\hypersetup{
+ pdfauthor={Charles Berry},
+ pdftitle={Posterior Predictions with the \texttt{cellTypeCompositions} Package},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={Emacs 26.3 (Org mode 9.4.3)}, 
+ pdflang={English}}
+\begin{document}
+
+\maketitle
+Consider a setup in which there are 2046 integration sites
+characterized by four celltypes having 20 different compositions and
+10 different abundances.  The create this setup, first sample 20
+compositions according to Dirichlet distribution with parameter 0.5 as
+a 4 by 20 matrix and draw a sample of 2046 indexes on the columns:
+<<comment="">>=
+compositions <-
+  prop.table( matrix( rgamma(80,0.5), nrow=4),2)
+compIndex <- sample( 20, 2046, replace=TRUE)
+@ %def
+
+Set the possible abundances as 0.5, 1.0, 2.0, \ldots{}, 512 and let
+1024 indexes point to 0.5, 512 to 1.0, and so on with 2 indexes
+pointing to 512.0:
+<<comment="">>=
+abundances <- 2^seq(-1,9)
+abIndex <- sample( rep(1:10, 2^(10:1)) )
+@ %def
+
+For a specimen drawn under this setup, the integration sites have
+expected counts of cell types given by
+<<comment="">>=
+Ecells <- t( compositions[, compIndex] ) * abundances[ abIndex ]
+@ %def
+
+The sample preparation, cell sorting and extraction of integration
+sites results in misidentification of cells by type and potential loss
+of material.  The is reflected by a filtration matrix, \texttt{omega}, given here as
+<<comment="">>=
+omega <-
+  matrix(c(
+    0.80, 0.01, 0.00, 0.00,
+    0.01, 0.97, 0.01, 0.00,
+    0.01, 0.01, 0.60, 0.00,
+    0.00, 0.00, 0.01, 0.98),
+    ncol=4, byrow=TRUE) + 0.0001
+
+@ %def
+
+To simulate a draw from the population, the \texttt{cellTypeCompositions}
+library is loaded and the \texttt{rtab} function is called with
+\texttt{impute.unseen=FALSE}, since all integrations sites are represented in
+the setup.  
+
+<<comment="">>=
+library(cellTypeCompositions)
+
+pop <-
+  list(
+    eta=compositions,
+    lambda=abundances,
+    dataToEta=compIndex,
+    dataToLambda=abIndex)
+tab <- rtab(list(pop), omega, impute.unseen=FALSE)
+@ %def
+
+The table only has \Sexpr{ nrow(tab) } integration sites in it as many
+with low abundance did not generate a positive count for any cell
+type, and there are only \Sexpr{ nrow(unique(tab)) } unique rows.
+The data are rendered in a compact form using the \texttt{uniTab} function:
+<<comment="">>=
+wtab <- uniTab( tab )
+@ %def
+
+Now the simulated data can be fitted using the \texttt{gibbsScan}
+function. One hundred MCMC samples are drawn from the posterior and
+the last draw is retained.
+
+<<comment="">>=
+fit <- gibbsScan(wtab, omega, nburn=100)
+@ %def
+
+Using the last draw, the data are simulated with a posterior
+predictive draw. The default value of \texttt{impute.unseen=TRUE} is used,
+since many integrsation sites are not represented in the \texttt{fit}
+object. The imputation uses the probability of observation to guide
+sampling the unseen sites.
+<<comment="">>=
+newtab <- rtab(fit, omega)
+newWtab <- uniTab(newtab)
+@ %def
+
+There are \Sexpr{ nrow(newtab) } integration sites in this table and there are
+\Sexpr{ nrow(unique(newtab)) } rows. For comparison, here are the counts for most abundant rows (column \texttt{n} is the
+number of duplicate rows in the data)
+<<comment="">>=
+with(newWtab, cbind(tab,n)[tail(order( rowSums(tab)) ),]) # new
+with(wtab, cbind(tab,n)[tail(order( rowSums(tab)) ),]) # previous
+@ %def
+
+and here are the counts for the rows having exactly one cell each:
+<<comment="">>=
+with(newWtab, cbind(tab,n)[ rowSums(tab) == 1,]) # new
+with(wtab, cbind(tab,n)[ rowSums(tab) == 1,]) #  previous
+@ %def
+
+With the posterior predictive sample, further runs can be performed, viz.
+<<comment="">>=
+fit2 <- gibbsScan(newWtab, omega, nburn=100L)
+@ %def
+\end{document}
